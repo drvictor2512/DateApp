@@ -1,6 +1,10 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "jsx": "react-jsx",
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "strict": true,
     "paths": {
       "@/*": [
@@ -8,6 +12,7 @@
       ]
     }
   },
+  
   "include": [
     "**/*.ts",
     "**/*.tsx",
