@@ -31,6 +31,31 @@ export default function TabLayout() {
                 tabBarIcon: ({ color, size }) => (<Ionicons
                     name="paper-plane-outline" size={size} color={color} />)
             }} />
+            {/* Hidden screens - không hiện trên tab bar */}
+            <Tabs.Screen
+                name="filter"
+                options={{
+                    href: null, // Ẩn khỏi tab bar
+                }}
+            />
+            <Tabs.Screen
+                name="myProfile"
+                options={{
+                    href: null, // Ẩn khỏi tab bar
+                }}
+            />
+            <Tabs.Screen
+                name="viewProfile"
+                options={{
+                    href: null, // Ẩn khỏi tab bar
+                }}
+            />
+            <Tabs.Screen
+                name="chatDetails"
+                options={{
+                    href: null, // Ẩn khỏi tab bar
+                }}
+            />
         </Tabs>
     )
 }
