@@ -1,86 +1,192 @@
-import { Ionicons } from '@expo/vector-icons'
+import { Ionicons } from '@expo/vector-icons' 
 import { useRouter } from 'expo-router'
-import { useMemo, useRef, useState } from 'react'
-import { Animated, Dimensions, Image, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react' 
+import { Animated, Dimensions, Easing, Image, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { listUsers, updateUser, User, getUser } from '../../lib/api'
+import { useAuth } from '../../lib/auth'
+import { IMAGE_FALLBACK } from '../../lib/config'
+import { getPrefs, clearPrefs } from '../../lib/prefs'
+import { useFocusEffect } from '@react-navigation/native'
 
 const { width } = Dimensions.get('window')
 const SWIPE_THRESHOLD = width * 0.25
 const PRIMARY_COLOR = '#00C2D1'
 const SECONDARY_COLOR = '#5A6C7A'
 
-// Mock profiles used for the swipe deck
-const PROFILES = [
-  {
-    id: '1',
-    name: 'Ava Jones',
-    age: 25,
-    job: 'Business Analyst at Tech',
-    pronouns: 'she/ her/ hers',
-    city: 'Las Vegas, NV 89104',
-    distanceKm: 2,
-    image: 'https://images.unsplash.com/photo-1517960413843-0aee8e2b3285?w=800&q=80',
-  },
-  {
-    id: '2',
-    name: 'Rae Smith',
-    age: 27,
-    job: 'Product Designer',
-    pronouns: 'she/ her',
-    city: 'Los Angeles, CA',
-    distanceKm: 4,
-    image: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800&q=80',
-  },
-  {
-    id: '3',
-    name: 'Mia Brown',
-    age: 24,
-    job: 'Illustrator',
-    pronouns: 'she/ her',
-    city: 'Seattle, WA',
-    distanceKm: 7,
-    image: 'https://images.unsplash.com/photo-1526510747491-58f928ec870f?w=800&q=80',
-  },
-]
+type CardProfile = {
+  id: string
+  name: string
+  age: number
+  job?: string
+  pronouns?: string
+  city?: string
+  image: string
+}
 
 export default function Heart() {
   const router = useRouter()
+  const { user: me, setUser } = useAuth()
   const [index, setIndex] = useState(0)
-  const position = useRef(new Animated.ValueXY()).current
+  const [profiles, setProfiles] = useState<CardProfile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [endRound, setEndRound] = useState(false)
+  const [matchUser, setMatchUser] = useState<{ id: string; name: string; image: string } | null>(null)
+  const positionX = useRef(new Animated.Value(0)).current
+  const lastPrefsStr = useRef<string | null>(null)
+  const likedMeIds = useRef<Set<string>>(new Set())
 
-  const rotate = position.x.interpolate({
+  const rotate = positionX.interpolate({
     inputRange: [-width, 0, width],
     outputRange: ['-15deg', '0deg', '15deg'],
   })
 
   // Overlay opacity for like/dislike indicators
-  const likeOpacity = position.x.interpolate({ inputRange: [0, width / 3], outputRange: [0, 1], extrapolate: 'clamp' })
-  const nopeOpacity = position.x.interpolate({ inputRange: [-width / 3, 0], outputRange: [1, 0], extrapolate: 'clamp' })
+  const likeOpacity = positionX.interpolate({ inputRange: [0, width / 3], outputRange: [0, 1], extrapolate: 'clamp' })
+  const nopeOpacity = positionX.interpolate({ inputRange: [-width / 3, 0], outputRange: [1, 0], extrapolate: 'clamp' })
+  const nextScale = positionX.interpolate({ inputRange: [-width, 0, width], outputRange: [1, 0.96, 1], extrapolate: 'clamp' })
+  const nextTranslateY = positionX.interpolate({ inputRange: [-width, 0, width], outputRange: [0, 10, 0], extrapolate: 'clamp' })
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5,
-        onPanResponderMove: Animated.event([null, { dx: position.x, dy: position.y }], { useNativeDriver: false }),
-        onPanResponderRelease: (_, { dx }) => {
-          if (dx > SWIPE_THRESHOLD) {
-            Animated.timing(position, { toValue: { x: width * 1.2, y: 0 }, duration: 200, useNativeDriver: true }).start(() => nextCard())
-          } else if (dx < -SWIPE_THRESHOLD) {
-            Animated.timing(position, { toValue: { x: -width * 1.2, y: 0 }, duration: 200, useNativeDriver: true }).start(() => nextCard())
+        onStartShouldSetPanResponder: () => !endRound && !matchUser,
+        onMoveShouldSetPanResponder: (_, g) => !endRound && !matchUser && (Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 5),
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderMove: Animated.event([null, { dx: positionX }], { useNativeDriver: false }),
+        onPanResponderRelease: (_, { dx, vx }) => {
+          const like = dx > SWIPE_THRESHOLD || vx > 0.8
+          const nope = dx < -SWIPE_THRESHOLD || vx < -0.8
+          const likedId = profiles[index]?.id
+          if (like) {
+            Animated.timing(positionX, { toValue: width * 1.2, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(async () => {
+              if (likedId) await likeUser(likedId)
+              nextCard()
+            })
+          } else if (nope) {
+            Animated.timing(positionX, { toValue: -width * 1.2, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(nextCard)
           } else {
-            Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start()
+            Animated.spring(positionX, { toValue: 0, useNativeDriver: true, friction: 6, tension: 80 }).start()
           }
         },
       }),
-    [position]
+    [positionX, profiles, index, endRound, me?.id, (me?.matches || []).length]
   )
 
   const nextCard = () => {
-    position.setValue({ x: 0, y: 0 })
-    setIndex((i) => (i + 1) % PROFILES.length)
+    positionX.setValue(0)
+    setIndex((i) => {
+      const len = Math.max(1, profiles.length)
+      if (profiles.length > 0) {
+        const next = (i + 1) % len
+        if (next === 0) {
+          setEndRound(true)
+          return i // keep current index so overlay shows after last card
+        }
+        return next
+      }
+      return i
+    })
   }
 
-  const current = PROFILES[index]
-  const next = PROFILES[(index + 1) % PROFILES.length]
+  async function refreshWithPrefs(prefs?: any) {
+    try {
+      const [users, p] = await Promise.all([listUsers(), prefs ? Promise.resolve(prefs) : getPrefs()])
+      const meId = me?.id
+      const myMatches = new Set(me?.matches || [])
+      const eligibleRaw = users.filter((u) => {
+        if (u.id === meId) return false
+        if (myMatches.has(u.id)) return false
+        return true
+      })
+      likedMeIds.current = new Set((users || []).filter((u) => (u.matches || []).includes(meId || '')).map((u) => u.id));
+      const eligible = eligibleRaw.filter((u) => applyPrefs(u, p))
+      const mapped: CardProfile[] = eligible.map((u) => ({
+        id: u.id,
+        name: u.name,
+        age: u.age,
+        job: u.occupation,
+        pronouns: u.gender === 0 ? 'she/ her' : 'he/ him',
+        city: u.location,
+        image: (u.photos && u.photos[0]) || u.avatar || IMAGE_FALLBACK,
+      }))
+      setProfiles(mapped)
+      setLoading(false)
+      setIndex(0)
+      lastPrefsStr.current = JSON.stringify(p)
+    } catch (e) {
+      console.warn('Failed to load users from MockAPI', e)
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    refreshWithPrefs()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me?.id, (me?.matches || []).length])
+
+  useFocusEffect(
+    useCallback(() => {
+      // On focus, reload only if prefs changed
+      (async () => {
+        try {
+          const p = await getPrefs()
+          const str = JSON.stringify(p)
+          if (str !== lastPrefsStr.current) {
+            refreshWithPrefs(p)
+          }
+        } catch {}
+      })()
+      // On blur, clear filters so that returning from other tabs resets
+      return () => {
+        clearPrefs().catch(() => {})
+      }
+    }, [me?.id])
+  )
+
+  function applyPrefs(u: User, prefs: { gender?: 0|1|null; ageMin: number; ageMax: number; languages: string[] }) {
+    if (prefs.gender === 0 || prefs.gender === 1) {
+      if (u.gender !== prefs.gender) return false
+    }
+    if (typeof u.age === 'number') {
+      if (u.age < prefs.ageMin || u.age > prefs.ageMax) return false
+    }
+    if (prefs.languages && prefs.languages.length) {
+      const set = new Set((u.languages || []).map((s) => s.toLowerCase()))
+      const ok = prefs.languages.some((l) => set.has(l.toLowerCase()))
+      if (!ok) return false
+    }
+    return true
+  }
+
+  const likeUser = async (targetId: string) => {
+    if (!me) return
+    const current = Array.isArray(me.matches) ? me.matches : []
+    if (current.includes(targetId)) return
+    const next = [...current, targetId]
+    try {
+      await updateUser(me.id, { matches: next })
+      setUser({ ...me, matches: next })
+      // Always show a match modal (lightweight UX): no mutual check
+      let info = profiles.find((p) => p.id === targetId)
+      if (!info) {
+        try {
+          const u = await getUser(targetId)
+          info = {
+            id: u.id,
+            name: u.name,
+            age: u.age as any,
+            image: (u.photos && u.photos[0]) || u.avatar || IMAGE_FALLBACK,
+          } as any
+        } catch {}
+      }
+      setMatchUser({ id: targetId, name: info?.name || '', image: (info as any)?.image || IMAGE_FALLBACK })
+    } catch (e) {
+      console.warn('Failed to update matches', e)
+    }
+  }
+
+  const current = profiles[index]
+  const next = profiles[(index + 1) % Math.max(1, profiles.length)]
 
   return (
     <View style={styles.screen}>
@@ -96,31 +202,37 @@ export default function Heart() {
       </View>
 
       {/* Progress bar mimic under header */}
-      <View style={styles.progressBar}><View style={[styles.progressFill, { width: `${((index % PROFILES.length) + 1) / PROFILES.length * 100}%` }]} /></View>
+      <View style={styles.progressBar}><View style={[
+        styles.progressFill,
+        { width: `${profiles.length ? (((index % profiles.length) + 1) / profiles.length) * 100 : 0}%` },
+      ]} /></View>
 
       {/* Next card underneath for depth effect */}
       <View style={styles.cardStack}>
-        <View style={[styles.card, styles.cardUnder]}> 
-          <Image source={{ uri: next.image }} style={styles.image} />
-        </View>
+        {next && (
+          <Animated.View style={[styles.card, styles.cardUnder, { transform: [{ scale: nextScale }, { translateY: nextTranslateY }] }]}> 
+            <Image source={{ uri: next.image }} style={styles.image} />
+          </Animated.View>
+        )}
 
         {/* Top interactive card */}
-        <Animated.View
-          style={[styles.card, { transform: [{ translateX: position.x }, { translateY: position.y }, { rotate }] }]}
-          {...panResponder.panHandlers}
-        >
-          <TouchableOpacity activeOpacity={0.9} onPress={() => router.push(`/tabs/viewProfile?id=${current.id}`)} style={{ flex: 1 }}>
-            <Image source={{ uri: current.image }} style={styles.image} />
+        {current ? (
+          <Animated.View
+            style={[styles.card, { transform: [{ translateX: positionX }, { rotate }] }]}
+            {...panResponder.panHandlers}
+          >
+            <TouchableOpacity activeOpacity={0.9} onPress={() => router.push(`/tabs/viewProfile?id=${current.id}`)} style={{ flex: 1 }}>
+              <Image source={{ uri: current.image }} style={styles.image} />
 
             {/* Text overlay info */}
             <View style={styles.infoOverlay}>
               <Text style={styles.nameText}>{current.name}, {current.age} <Ionicons name="shield-checkmark" size={14} color={PRIMARY_COLOR} /></Text>
               <View style={styles.badgeRow}>
-                <Text style={styles.badge}>{current.pronouns}</Text>
+                {!!current.pronouns && <Text style={styles.badge}>{current.pronouns}</Text>}
               </View>
               <View style={styles.jobRow}>
                 <Ionicons name="briefcase-outline" size={14} color="#fff" />
-                <Text style={styles.jobText}>{current.job}</Text>
+                <Text style={styles.jobText}>{current.job || '—'}</Text>
               </View>
             </View>
 
@@ -131,19 +243,62 @@ export default function Heart() {
             <Animated.View style={[styles.badgeBottom, { opacity: nopeOpacity }]}>
               <Ionicons name="close-circle" size={84} color="#F87171" />
             </Animated.View>
-          </TouchableOpacity>
-        </Animated.View>
+            </TouchableOpacity>
+          </Animated.View>
+        ) : (
+          <View style={[styles.card, styles.cardUnder, { alignItems: 'center', justifyContent: 'center' }]}>
+            <Text style={{ color: '#6B7280' }}>{loading ? 'Loading profiles…' : 'No profiles available'}</Text>
+          </View>
+        )}
       </View>
 
       {/* Bottom actions (optional tap helpers) */}
       <View style={styles.actions}>
-        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]} onPress={() => Animated.timing(position, { toValue: { x: -width * 1.2, y: 0 }, duration: 200, useNativeDriver: true }).start(nextCard)}>
+        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]} onPress={() => Animated.timing(positionX, { toValue: -width * 1.2, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(nextCard)} disabled={!current || endRound || !!matchUser}>
           <Ionicons name="close" size={28} color="#EF4444" />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#D1FAE5' }]} onPress={() => Animated.timing(position, { toValue: { x: width * 1.2, y: 0 }, duration: 200, useNativeDriver: true }).start(nextCard)}>
+        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#D1FAE5' }]} onPress={() => {
+          const likedId = profiles[index]?.id
+          Animated.timing(positionX, { toValue: width * 1.2, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(async () => {
+            if (likedId) await likeUser(likedId)
+            nextCard()
+          })
+        }} disabled={!current || endRound || !!matchUser}>
           <Ionicons name="checkmark" size={28} color="#10B981" />
         </TouchableOpacity>
       </View>
+
+      {endRound && (
+        <View style={styles.endOverlay}>
+          <View style={styles.endCard}>
+            <Ionicons name="sparkles-outline" size={36} color={PRIMARY_COLOR} />
+            <Text style={styles.endTitle}>Hết gợi ý</Text>
+            <Text style={styles.endSubtitle}>Danh sách bạn có thể kết nối hiện đã hết. Nhấn Tiếp tục để xem lại từ đầu.</Text>
+            <TouchableOpacity style={styles.endBtn} onPress={() => { setEndRound(false); setIndex(0); positionX.setValue(0) }}>
+              <Text style={{ color: '#fff', fontWeight: '700' }}>Tiếp tục</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {matchUser && (
+        <View style={styles.endOverlay}>
+          <View style={styles.matchCard}>
+            <View style={{ width: 88, height: 88, borderRadius: 44, overflow: 'hidden', marginBottom: 10 }}>
+              <Image source={{ uri: matchUser.image }} style={{ width: '100%', height: '100%' }} />
+            </View>
+            <Ionicons name="heart" size={22} color={PRIMARY_COLOR} />
+            <Text style={styles.endTitle}>New match found!</Text>
+            <Text style={styles.endSubtitle}>Bạn và {matchUser.name} đã thích nhau.</Text>
+            <TouchableOpacity style={styles.endBtn} onPress={() => { setMatchUser(null); router.replace('/tabs/chat' as any) }}>
+              <Text style={{ color: '#fff', fontWeight: '700' }}>Đi tới Chat</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ marginTop: 8 }} onPress={() => setMatchUser(null)}>
+              <Text style={{ color: SECONDARY_COLOR }}>Đóng</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   )
 }
@@ -168,4 +323,13 @@ const styles = StyleSheet.create({
   badgeBottom: { position: 'absolute', left: 0, right: 0, bottom: 80, alignItems: 'center' },
   actions: { flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center', paddingVertical: 10 },
   actionBtn: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
+  endOverlay: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: '#00000066', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  endCard: { width: '100%', maxWidth: 360, backgroundColor: '#fff', borderRadius: 16, padding: 20, alignItems: 'center', gap: 10 },
+  endTitle: { fontSize: 18, fontWeight: '800', color: '#111827', marginTop: 4 },
+  endSubtitle: { color: SECONDARY_COLOR, textAlign: 'center' },
+  endBtn: { marginTop: 8, backgroundColor: PRIMARY_COLOR, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12 },
+  matchCard: { width: '100%', maxWidth: 360, backgroundColor: '#fff', borderRadius: 16, padding: 20, alignItems: 'center' },
 })
+
+
+

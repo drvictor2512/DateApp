@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, LayoutChangeEvent, PanResponder, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { DEFAULT_PREFS, getPrefs, setPrefs } from '../../lib/prefs';
 
 const PRIMARY_COLOR = '#00C2D1';
 const SECONDARY_COLOR = '#5A6C7A';
@@ -93,7 +94,7 @@ export default function Filter() {
   const addLang = (l: string) => setLangs((prev) => (prev.includes(l) ? prev : [...prev, l]));
   const removeLang = (l: string) => setLangs((prev) => prev.filter((x) => x !== l));
 
-  const clearAll = () => {
+  const clearAll = async () => {
     setGender('Female');
     setAgeRange([24, 35]);
     minX.setValue(((24 - minAge) / (maxAge - minAge)) * trackWidth);
@@ -101,7 +102,27 @@ export default function Filter() {
     setDistanceKm(10);
     distX.setValue((10 / 80) * trackWidth);
     setLangs([]);
+    await setPrefs(DEFAULT_PREFS);
   };
+
+  // Load existing preferences
+  useEffect(() => {
+    (async () => {
+      const p = await getPrefs();
+      setGender(p.gender === 0 ? 'Female' : p.gender === 1 ? 'Male' : 'Female');
+      setAgeRange([p.ageMin, p.ageMax]);
+      setDistanceKm(p.distanceKm ?? 10);
+      setExpandRadius(!!p.expandRadius);
+      setLangs(p.languages || []);
+    })();
+  }, []);
+
+  // Sync knobs when trackWidth known
+  useEffect(() => {
+    minX.setValue(((ageRange[0] - minAge) / (maxAge - minAge)) * trackWidth);
+    maxX.setValue(((ageRange[1] - minAge) / (maxAge - minAge)) * trackWidth);
+    distX.setValue(((distanceKm) / 80) * trackWidth);
+  }, [trackWidth]);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#fff' }}>
@@ -185,7 +206,18 @@ export default function Filter() {
         <TouchableOpacity style={styles.clearBtn} onPress={clearAll}>
           <Text style={{ color: '#111827', fontWeight: '700' }}>Clear all</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.applyBtn} onPress={() => router.replace('/tabs/heart')}>
+        <TouchableOpacity style={styles.applyBtn} onPress={async () => {
+          const prefs = {
+            gender: gender === 'Female' ? 0 : gender === 'Male' ? 1 : null,
+            ageMin: ageRange[0],
+            ageMax: ageRange[1],
+            distanceKm,
+            expandRadius,
+            languages: langs,
+          } as const;
+          await setPrefs(prefs as any);
+          router.replace('/tabs/heart');
+        }}>
           <Text style={{ color: '#fff', fontWeight: '700' }}>Apply filters</Text>
         </TouchableOpacity>
       </View>
