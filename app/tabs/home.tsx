@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import React, { useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import {
   Image,
@@ -7,7 +8,12 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Animated,
+  Easing,
+  Pressable,
+  useWindowDimensions,
 } from 'react-native';
+import { useAuth } from '../../lib/auth';
 
 const PRIMARY_COLOR = '#00C2D1';
 const SECONDARY_COLOR = '#5A6C7A';
@@ -25,15 +31,32 @@ const FEATURES = [
 
 export default function Home() {
   const router = useRouter();
+  const { user, logout } = useAuth();
+  const { width } = useWindowDimensions();
+  const drawerWidth = Math.min(width * 0.75, 320);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const anim = useRef(new Animated.Value(0)).current; // 0 closed, 1 open
+  const openMenu = () => {
+    setMenuOpen(true);
+    Animated.timing(anim, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  };
+  const closeMenu = () => {
+    Animated.timing(anim, { toValue: 0, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+      if (finished) setMenuOpen(false);
+    });
+  };
+  const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [-drawerWidth, 0] });
+  const backdropOpacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] });
   return (
     <ScrollView
       style={styles.screen}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      scrollEnabled={!menuOpen}
     >
       {/* Top header: menu and settings buttons */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton}>
+        <TouchableOpacity style={styles.iconButton} onPress={openMenu}>
           <Ionicons name="menu" size={24} color="#1F2A37" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.iconButton}>
@@ -48,7 +71,7 @@ export default function Home() {
             <View style={styles.avatarRing}>
               <View style={styles.avatarInnerRing}>
                 <Image
-                  source={{ uri: 'https://i.pravatar.cc/150?img=5' }}
+                  source={{ uri: (user?.avatar || (user?.photos && user.photos[0])) ?? 'https://i.pravatar.cc/150?img=5' }}
                   style={styles.avatarImage}
                 />
               </View>
@@ -60,7 +83,9 @@ export default function Home() {
 
           <View style={styles.profileInfo}>
             <View style={styles.nameRow}>
-              <Text style={styles.profileName}>Joshua Edwards, 29</Text>
+              <Text style={styles.profileName}>
+                {user?.name ?? 'Guest'}{user?.age ? `, ${user.age}` : ''}
+              </Text>
               <Ionicons name="shield-checkmark" size={18} color={PRIMARY_COLOR} />
             </View>
             <Text style={styles.profileSubText}>
@@ -143,6 +168,33 @@ export default function Home() {
           </View>
         ))}
       </View>
+      {menuOpen && (
+        <>
+          <Animated.View pointerEvents={menuOpen ? 'auto' : 'none'} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: '#000', opacity: backdropOpacity }} />
+          <Animated.View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: drawerWidth, transform: [{ translateX }], backgroundColor: '#fff', borderRightWidth: 1, borderRightColor: BORDER_COLOR, paddingTop: 24, paddingHorizontal: 16, zIndex: 2 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <Ionicons name="person-circle-outline" size={40} color={SECONDARY_COLOR} />
+              <View>
+                <Text style={{ fontWeight: '700', color: '#111827' }}>{user?.name ?? 'Người dùng'}</Text>
+                {user?.age ? <Text style={{ color: SECONDARY_COLOR }}>{user.age} tuổi</Text> : null}
+              </View>
+            </View>
+
+            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }} onPress={() => { closeMenu(); router.push('/tabs/myProfile'); }}>
+              <Ionicons name="create-outline" size={20} color="#111827" />
+              <Text style={{ marginLeft: 10, color: '#111827' }}>Chỉnh sửa hồ sơ</Text>
+            </TouchableOpacity>
+
+            <View style={{ height: 1, backgroundColor: BORDER_COLOR, marginVertical: 12 }} />
+
+            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }} onPress={() => { closeMenu(); logout(); router.replace('/auth' as any); }}>
+              <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+              <Text style={{ marginLeft: 10, color: '#DC2626', fontWeight: '700' }}>Đăng xuất</Text>
+            </TouchableOpacity>
+          </Animated.View>
+          <Pressable onPress={closeMenu} style={{ position: 'absolute', left: drawerWidth, right: 0, top: 0, bottom: 0, zIndex: 1 }} />
+        </>
+      )}
     </ScrollView>
   );
 }
