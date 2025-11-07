@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { getUser, updateUser, User } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { IMAGE_FALLBACK } from '../../lib/config';
+import { emit as emitEvent } from '../../lib/events';
 
 const PRIMARY_COLOR = '#00C2D1';
 const SECONDARY_COLOR = '#5A6C7A';
@@ -13,7 +15,7 @@ const BORDER_COLOR = '#E5EAF0';
 export default function ViewProfile() {
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, from } = useLocalSearchParams<{ id: string, from?: string }>();
   const [data, setData] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const { user: me, setUser } = useAuth();
@@ -49,10 +51,17 @@ export default function ViewProfile() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 24 }}>
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.headerIcon} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.headerIcon} onPress={() => {
+          if (from) {
+            // return to the originating tab/screen if provided
+            router.replace(String(from) as any);
+          } else {
+            router.back();
+          }
+        }}>
           <Ionicons name="chevron-back" size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={styles.headerTitle}>Hồ sơ</Text>
         <View style={styles.headerIcon} />
       </View>
 
@@ -66,17 +75,17 @@ export default function ViewProfile() {
           <View style={{ paddingHorizontal: paddingH }}>
             <View style={{ flexDirection: 'row', gap }}>
               <View style={{ width: mainSize }}>
-                <View style={[styles.photoMain, { width: mainSize, height: mainSize }]}> 
+                <View style={[styles.photoMain, { width: mainSize, height: mainSize }]}>
                   <Image source={{ uri: avatar }} style={{ width: '100%', height: '100%', borderRadius: 12 }} />
                 </View>
               </View>
               <View style={{ gap }}>
-                {[0,1].map((i) => (
+                {[0, 1].map((i) => (
                   <View key={i} style={[styles.photoSlot, smallStyle]}>
                     {photos[i] ? (
                       <Image source={{ uri: photos[i] }} style={smallStyle} />
                     ) : (
-                      <View style={[smallStyle, { backgroundColor: '#F2F6F9', alignItems:'center', justifyContent:'center' }]}>
+                      <View style={[smallStyle, { backgroundColor: '#F2F6F9', alignItems: 'center', justifyContent: 'center' }]}>
                         <Ionicons name="image-outline" size={18} color={SECONDARY_COLOR} />
                       </View>
                     )}
@@ -85,7 +94,7 @@ export default function ViewProfile() {
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap, marginTop: gap }}>
-              {[2,3,4].map((i, idx) => (
+              {[2, 3, 4].map((i, idx) => (
                 <View key={i} style={[styles.photoSlot, smallStyle]}>
                   {photos[i] ? (
                     <>
@@ -95,7 +104,7 @@ export default function ViewProfile() {
                       )}
                     </>
                   ) : (
-                    <View style={[smallStyle, { backgroundColor: '#F2F6F9', alignItems:'center', justifyContent:'center' }]}>
+                    <View style={[smallStyle, { backgroundColor: '#F2F6F9', alignItems: 'center', justifyContent: 'center' }]}>
                       <Ionicons name="image-outline" size={18} color={SECONDARY_COLOR} />
                     </View>
                   )}
@@ -184,7 +193,10 @@ export default function ViewProfile() {
               const next = [...current, data.id]
               try {
                 await updateUser(me.id, { matches: next })
-                setUser({ ...me, matches: next })
+                const newMe = { ...me, matches: next } as any
+                setUser(newMe)
+                try { await AsyncStorage.setItem('auth_user', JSON.stringify(newMe)) } catch (e) { }
+                try { emitEvent('matches:changed'); } catch (e) { }
               } catch (e) { console.warn('Failed to update matches', e) }
             }
             // Always show lightweight match modal (no mutual check)

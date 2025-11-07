@@ -1,12 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, Image, ActivityIndicator, Alert, useWindowDimensions } from 'react-native';
-import { useAuth } from '../../lib/auth';
+import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { updateUser, type User } from '../../lib/api';
-import * as ImagePicker from 'expo-image-picker';
+import { useAuth } from '../../lib/auth';
 import { uploadImage } from '../../lib/cloudinary';
-import { IMAGE_FALLBACK, CLOUDINARY } from '../../lib/config';
+import { CLOUDINARY, IMAGE_FALLBACK } from '../../lib/config';
 
 const PRIMARY_COLOR = '#00C2D1';
 const SECONDARY_COLOR = '#5A6C7A';
@@ -167,20 +167,20 @@ export default function MyProfile() {
         <TouchableOpacity style={styles.headerIcon} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Edit profile</Text>
+        <Text style={styles.headerTitle}>Chỉnh sửa hồ sơ</Text>
         <View style={styles.headerIcon} />
       </View>
 
       <View style={styles.progressWrapper}>
-        <Text style={styles.progressLabel}>Profile completion: <Text style={{ color: PRIMARY_COLOR, fontWeight: '700' }}>45%</Text></Text>
+        <Text style={styles.progressLabel}>Hoàn thành hồ sơ: <Text style={{ color: PRIMARY_COLOR, fontWeight: '700' }}>45%</Text></Text>
         <View style={styles.progressBarTrack}><View style={styles.progressBarFill} /></View>
       </View>
 
       <View style={styles.section}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text style={styles.sectionTitle}>Photos</Text>
+          <Text style={styles.sectionTitle}>Ảnh</Text>
           <TouchableOpacity onPress={() => setPhotoEditMode((v) => !v)}>
-            <Text style={{ color: PRIMARY_COLOR, fontWeight: '700' }}>{photoEditMode ? 'Done' : 'Edit'}</Text>
+            <Text style={{ color: PRIMARY_COLOR, fontWeight: '700' }}>{photoEditMode ? 'Xong' : 'Chỉnh sửa'}</Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.sectionSub}>The main photo is how you appear to others on the swipe view.</Text>
@@ -196,24 +196,24 @@ export default function MyProfile() {
                 {/* Main avatar */}
                 <View style={{ width: mainSize }}>
                   <TouchableOpacity style={[styles.photoMain, { width: mainSize, height: mainSize }]} onPress={() => openEditor({ key: 'avatar', label: 'Avatar', type: 'text' })} onLongPress={async () => {
-            // Long press to pick and upload new avatar
-            if (!user) return;
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') return;
-            const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.9 });
-            if (pick.canceled) return;
-            try {
-              const up = await uploadImage(pick.assets[0].uri);
-              await savePatch({ avatar: up.secure_url, avatarDeleteToken: up.delete_token });
-            } catch (e) { console.warn(e); }
-          }} activeOpacity={0.85}>
-            <Image source={{ uri: (user?.avatar) ?? IMAGE_FALLBACK }} style={{ width: '100%', height: '100%', borderRadius: 12 }} />
-            {photoEditMode && !!user?.avatar && (
-              <TouchableOpacity onPress={confirmDeleteAvatar} style={styles.deleteBadge}>
-                <Ionicons name="trash" size={16} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </TouchableOpacity>
+                    // Long press to pick and upload new avatar
+                    if (!user) return;
+                    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                    if (status !== 'granted') return;
+                    const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.9 });
+                    if (pick.canceled) return;
+                    try {
+                      const up = await uploadImage(pick.assets[0].uri);
+                      await savePatch({ avatar: up.secure_url, avatarDeleteToken: up.delete_token });
+                    } catch (e) { console.warn(e); }
+                  }} activeOpacity={0.85}>
+                    <Image source={{ uri: (user?.avatar) ?? IMAGE_FALLBACK }} style={{ width: '100%', height: '100%', borderRadius: 12 }} />
+                    {photoEditMode && !!user?.avatar && (
+                      <TouchableOpacity onPress={confirmDeleteAvatar} style={styles.deleteBadge}>
+                        <Ionicons name="trash" size={16} color="#fff" />
+                      </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
                 </View>
                 {/* Right column (2 tiles) */}
                 <View style={{ gap }}>
@@ -294,21 +294,21 @@ export default function MyProfile() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>About me</Text>
-        <Text style={styles.sectionSub}>Make it easy for others to get a sense of who you are.</Text>
+        <Text style={styles.sectionTitle}>Về tôi</Text>
+        <Text style={styles.sectionSub}>Viết vài dòng giới thiệu để người khác hiểu bạn hơn.</Text>
         <TouchableOpacity activeOpacity={0.9} onPress={() => aboutInputRef.current?.focus()} style={styles.textAreaPlaceholder}>
-          <TextInput ref={aboutInputRef} value={aboutMe} onChangeText={setAboutMe} placeholder={"Share a few words about yourself, your interests, and what you're looking for in a connection..."} multiline textAlignVertical="top" style={styles.textAreaInput} />
+          <TextInput ref={aboutInputRef} value={aboutMe} onChangeText={setAboutMe} placeholder={"Chia sẻ vài điều về bản thân, sở thích và bạn đang tìm gì..."} multiline textAlignVertical="top" style={styles.textAreaInput} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>My details</Text>
+        <Text style={styles.sectionTitle}>Thông tin của tôi</Text>
         <View style={styles.detailsList}>
           {([
-            { label: 'Occupation', key: 'occupation' as const, value: user?.occupation || 'Add', icon: 'briefcase-outline', type: 'text' as const },
-            { label: 'Gender & Pronouns', key: 'gender' as const, value: user ? (user.gender === 0 ? 'Female (she/her)' : 'Male (he/him)') : 'Add', icon: 'male-outline', type: 'select' as const },
-            { label: 'Education', key: 'education' as const, value: user?.education || 'Add', icon: 'school-outline', type: 'text' as const },
-            { label: 'Location', key: 'location' as const, value: user?.location || 'Add', icon: 'location-outline', type: 'text' as const },
+            { label: 'Nghề nghiệp', key: 'occupation' as const, value: user?.occupation || 'Thêm', icon: 'briefcase-outline', type: 'text' as const },
+            { label: 'Giới tính & Đại từ', key: 'gender' as const, value: user ? (user.gender === 0 ? 'Nữ (she/her)' : 'Nam (he/him)') : 'Thêm', icon: 'male-outline', type: 'select' as const },
+            { label: 'Học vấn', key: 'education' as const, value: user?.education || 'Thêm', icon: 'school-outline', type: 'text' as const },
+            { label: 'Địa điểm', key: 'location' as const, value: user?.location || 'Thêm', icon: 'location-outline', type: 'text' as const },
           ]).map((row) => (
             <TouchableOpacity key={row.label} style={styles.detailRow} onPress={() => openEditor(row)}>
               <View style={styles.detailLeft}><Ionicons name={row.icon as any} size={18} color={SECONDARY_COLOR} /><Text style={styles.detailLabel}>{row.label}</Text></View>
@@ -318,13 +318,13 @@ export default function MyProfile() {
 
           <View style={{ height: 10 }} />
           {([
-            { label: 'Height', key: 'height' as const, value: user?.height ? `${user.height} cm` : 'Add', icon: 'ruler-outline', type: 'number' as const },
-            { label: 'Smoking', key: 'smoking' as const, value: user?.smoking || 'Add', icon: 'cafe-outline', type: 'text' as const },
-            { label: 'Drinking', key: 'drinking' as const, value: user?.drinking || 'Add', icon: 'wine-outline', type: 'text' as const },
-            { label: 'Pets', key: 'pets' as const, value: user?.pets || 'Add', icon: 'paw-outline', type: 'text' as const },
-            { label: 'Children', key: 'children' as const, value: user?.children || 'Add', icon: 'people-outline', type: 'text' as const },
-            { label: 'Zodiac sign', key: 'zodiac' as const, value: user?.zodiac || 'Add', icon: 'planet-outline', type: 'text' as const },
-            { label: 'Religion', key: 'religion' as const, value: user?.religion || 'Add', icon: 'hand-left-outline', type: 'text' as const },
+            { label: 'Chiều cao', key: 'height' as const, value: user?.height ? `${user.height} cm` : 'Thêm', icon: 'ruler-outline', type: 'number' as const },
+            { label: 'Hút thuốc', key: 'smoking' as const, value: user?.smoking || 'Thêm', icon: 'cafe-outline', type: 'text' as const },
+            { label: 'Uống rượu', key: 'drinking' as const, value: user?.drinking || 'Thêm', icon: 'wine-outline', type: 'text' as const },
+            { label: 'Thú cưng', key: 'pets' as const, value: user?.pets || 'Thêm', icon: 'paw-outline', type: 'text' as const },
+            { label: 'Con cái', key: 'children' as const, value: user?.children || 'Thêm', icon: 'people-outline', type: 'text' as const },
+            { label: 'Cung hoàng đạo', key: 'zodiac' as const, value: user?.zodiac || 'Thêm', icon: 'planet-outline', type: 'text' as const },
+            { label: 'Tôn giáo', key: 'religion' as const, value: user?.religion || 'Thêm', icon: 'hand-left-outline', type: 'text' as const },
           ]).map((row) => (
             <TouchableOpacity key={row.label} style={styles.detailRow} onPress={() => openEditor(row)}>
               <View style={styles.detailLeft}><Ionicons name={row.icon as any} size={18} color={SECONDARY_COLOR} /><Text style={styles.detailLabel}>{row.label}</Text></View>
@@ -370,10 +370,10 @@ export default function MyProfile() {
       </Modal>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>I enjoy</Text>
-        <Text style={styles.sectionSub}>Adding your interest is a great way to find like-minded connections.</Text>
+        <Text style={styles.sectionTitle}>Sở thích</Text>
+        <Text style={styles.sectionSub}>Thêm sở thích giúp tìm người cùng chí hướng.</Text>
         <TouchableOpacity style={styles.selectBox} onPress={() => setInterestOpen((o) => !o)}>
-          <Text style={styles.selectText}>Choose an interest</Text>
+          <Text style={styles.selectText}>Chọn sở thích</Text>
           <Ionicons name={interestOpen ? 'chevron-up' : 'chevron-down'} size={16} color={SECONDARY_COLOR} />
         </TouchableOpacity>
         {interestOpen && (
@@ -385,7 +385,7 @@ export default function MyProfile() {
               </TouchableOpacity>
             ))}
             <TouchableOpacity style={styles.dropdownItem} onPress={() => setOtherModal({ type: 'interest', text: '' })}>
-              <Text style={styles.dropdownText}>Other...</Text>
+              <Text style={styles.dropdownText}>Khác...</Text>
               <Ionicons name="create-outline" size={18} color={PRIMARY_COLOR} />
             </TouchableOpacity>
           </View>

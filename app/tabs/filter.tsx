@@ -130,16 +130,16 @@ export default function Filter() {
         <TouchableOpacity style={styles.headerIcon} onPress={() => router.replace('/tabs/heart')}>
           <Ionicons name="close" size={20} color="#111827" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Filters</Text>
+        <Text style={styles.headerTitle}>Bộ lọc</Text>
         <View style={styles.headerIcon} />
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
-        <Text style={styles.label}>What is your preferred gender?</Text>
+        <Text style={styles.label}>Bạn ưu tiên giới tính nào?</Text>
         <View style={styles.box}>
           {(['Male', 'Female'] as const).map((g) => (
             <TouchableOpacity key={g} style={styles.row} onPress={() => setGender(g)}>
-              <Text style={{ color: '#111827' }}>{g}</Text>
+              <Text style={{ color: '#111827' }}>{g === 'Male' ? 'Nam' : 'Nữ'}</Text>
               <View style={[styles.radio, gender === g && styles.radioChecked]}>
                 {gender === g && <View style={styles.radioDot} />}
               </View>
@@ -147,7 +147,7 @@ export default function Filter() {
           ))}
         </View>
 
-        <Text style={styles.sectionTitle}>Age range:</Text>
+        <Text style={styles.sectionTitle}>Khoảng tuổi:</Text>
         <View style={styles.box}>
           <View style={styles.sliderHeader}><Text style={styles.mono}>{minAge}</Text><Text style={styles.mono}>{maxAge}</Text></View>
           <View style={styles.track} onLayout={onTrackLayout}>
@@ -158,7 +158,7 @@ export default function Filter() {
           <Text style={styles.smallNote}>{ageRange[0]} - {ageRange[1]}</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Distance:</Text>
+        <Text style={styles.sectionTitle}>Khoảng cách:</Text>
         <View style={styles.box}>
           <View style={styles.sliderHeader}><Text style={styles.mono}>10 km</Text><Text style={styles.mono}>80 km</Text></View>
           <View style={styles.track} onLayout={onTrackLayout}>
@@ -166,17 +166,17 @@ export default function Filter() {
             <Animated.View style={[styles.knob, { transform: [{ translateX: distX }] }]} {...distPan.panHandlers} />
           </View>
           <View style={styles.switchRow}>
-            <Text style={styles.switchText}>Show profiles within a 15‑km range when run out of matches.</Text>
+            <Text style={styles.switchText}>Hiển thị hồ sơ trong phạm vi 15 km khi hết đề xuất.</Text>
             <Switch value={expandRadius} onValueChange={setExpandRadius} thumbColor="#fff" trackColor={{ true: PRIMARY_COLOR, false: '#D1D5DB' }} />
           </View>
           <Text style={styles.smallNote}>{distanceKm} km</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Languages:</Text>
+        <Text style={styles.sectionTitle}>Ngôn ngữ:</Text>
         <TouchableOpacity style={styles.selectBox} onPress={() => setLangOpen((o) => !o)}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Ionicons name="globe-outline" size={16} color={SECONDARY_COLOR} />
-            <Text style={{ color: '#111827' }}>Select languages</Text>
+            <Text style={{ color: '#111827' }}>Chọn ngôn ngữ</Text>
           </View>
           <Ionicons name={langOpen ? 'chevron-up' : 'chevron-down'} size={16} color={SECONDARY_COLOR} />
         </TouchableOpacity>
@@ -204,7 +204,7 @@ export default function Filter() {
 
       <View style={[styles.footer, { paddingBottom: Math.max(12, insets.bottom - 20) }]}>
         <TouchableOpacity style={styles.clearBtn} onPress={clearAll}>
-          <Text style={{ color: '#111827', fontWeight: '700' }}>Clear all</Text>
+          <Text style={{ color: '#111827', fontWeight: '700' }}>Xóa tất cả</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.applyBtn} onPress={async () => {
           const prefs = {
@@ -218,7 +218,7 @@ export default function Filter() {
           await setPrefs(prefs as any);
           router.replace('/tabs/heart');
         }}>
-          <Text style={{ color: '#fff', fontWeight: '700' }}>Apply filters</Text>
+          <Text style={{ color: '#fff', fontWeight: '700' }}>Áp dụng bộ lọc</Text>
         </TouchableOpacity>
       </View>
     </View>

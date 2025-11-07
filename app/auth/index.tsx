@@ -29,7 +29,7 @@ export default function Login() {
           </View>
         </View>
         <Text style={styles.title}>HeartSync</Text>
-        <Text style={styles.subtitle}>Where Hearts Connect, Love Finds Its Sync.</Text>
+        <Text style={styles.subtitle}>Nơi trái tim kết nối, tình yêu tìm thấy sự đồng điệu.</Text>
       </View>
 
       <View style={styles.card}>
@@ -44,7 +44,7 @@ export default function Login() {
             <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
-              placeholder="Username"
+              placeholder="Tên đăng nhập"
               placeholderTextColor="#9CA3AF"
               autoCapitalize="none"
               value={username}

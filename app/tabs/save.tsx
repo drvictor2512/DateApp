@@ -1,97 +1,96 @@
 // app/tabs/save.tsx
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Dimensions, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Dimensions, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { listUsers, updateUser } from '../../lib/api';
+import { useAuth } from '../../lib/auth';
+import { IMAGE_FALLBACK } from '../../lib/config';
+import { emit as emitEvent } from '../../lib/events';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 2;
 const PRIMARY_COLOR = '#00C2D1';
 
-// Saved profiles data
-const SAVED_PROFILES = [
-    {
-        id: '1',
-        name: 'Ava Jones',
-        age: 25,
-        job: 'Business Analyst',
-        city: 'Las Vegas, NV',
-        distanceKm: 2,
-        image: 'https://images.unsplash.com/photo-1517960413843-0aee8e2b3285?w=800&q=80',
-        saved: true,
-    },
-    {
-        id: '2',
-        name: 'Rae Smith',
-        age: 27,
-        job: 'Product Designer',
-        city: 'Los Angeles, CA',
-        distanceKm: 4,
-        image: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800&q=80',
-        saved: true,
-    },
-    {
-        id: '3',
-        name: 'Mia Brown',
-        age: 24,
-        job: 'Illustrator',
-        city: 'Seattle, WA',
-        distanceKm: 7,
-        image: 'https://images.unsplash.com/photo-1526510747491-58f928ec870f?w=800&q=80',
-        saved: true,
-    },
-    {
-        id: '4',
-        name: 'Emma Wilson',
-        age: 26,
-        job: 'Marketing Manager',
-        city: 'San Francisco, CA',
-        distanceKm: 5,
-        image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=800&q=80',
-        saved: true,
-    },
-    {
-        id: '5',
-        name: 'Sofia Davis',
-        age: 23,
-        job: 'Software Engineer',
-        city: 'Austin, TX',
-        distanceKm: 3,
-        image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800&q=80',
-        saved: true,
-    },
-    {
-        id: '6',
-        name: 'Isabella Martinez',
-        age: 28,
-        job: 'Photographer',
-        city: 'Portland, OR',
-        distanceKm: 6,
-        image: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=800&q=80',
-        saved: true,
-    },
-];
+// Saved profile UI shape
+type SavedProfile = {
+    id: string;
+    name: string;
+    age: number;
+    job: string;
+    city: string;
+    distanceKm: number;
+    image: string;
+    saved: boolean;
+};
 
 export default function Save() {
     const router = useRouter();
-    const [savedProfiles, setSavedProfiles] = useState(SAVED_PROFILES);
+    const { user: me, setUser } = useAuth();
+    const [savedProfiles, setSavedProfiles] = useState<SavedProfile[]>([]);
+    const [loading, setLoading] = useState(false);
+    useEffect(() => {
+        let mounted = true;
+        (async () => {
+            if (!me || !Array.isArray(me.matches) || me.matches.length === 0) {
+                if (mounted) setSavedProfiles([]);
+                return;
+            }
+            setLoading(true);
+            try {
+                const users = await listUsers();
+                const meMatches = Array.isArray(me?.matches) ? me!.matches : [];
+                const picks = users
+                    .filter(u => meMatches.includes(u.id))
+                    .map(u => ({
+                        id: u.id,
+                        name: u.name || 'Unknown',
+                        age: u.age || 0,
+                        job: u.occupation || '—',
+                        city: u.location || '—',
+                        image: u.avatar || (u.photos && u.photos[0]) || IMAGE_FALLBACK,
+                        distanceKm: 0,
+                        saved: true,
+                    }));
+                if (mounted) setSavedProfiles(picks as any);
+            } catch (e) {
+                console.warn('Failed to load saved profiles', e);
+            } finally {
+                if (mounted) setLoading(false);
+            }
+        })();
+        return () => { mounted = false; };
+    }, [me?.matches]);
 
-    const handleUnsave = (id: string) => {
-        setSavedProfiles(prev => prev.filter(profile => profile.id !== id));
+    const handleUnsave = async (id: string) => {
+        setSavedProfiles((prev: SavedProfile[]) => prev.filter((profile: SavedProfile) => profile.id !== id));
+        if (!me || !me.id) return;
+
+        try {
+            const current = Array.isArray(me.matches) ? me.matches : [];
+            const next = current.filter(m => m !== id);
+            await updateUser(me.id, { matches: next });
+            const newMe = { ...me, matches: next } as any;
+            setUser && setUser(newMe);
+            // persist auth user so other sessions / reloads reflect the change
+            try { await AsyncStorage.setItem('auth_user', JSON.stringify(newMe)); } catch (e) { }
+            // notify other screens that matches changed
+            try { emitEvent('matches:changed'); } catch (e) { }
+        } catch (e) {
+            console.warn('Failed to persist unsave', e);
+        }
     };
 
-    const renderProfileCard = ({ item }: { item: typeof SAVED_PROFILES[0] }) => (
+    const renderProfileCard = ({ item }: { item: SavedProfile }) => (
         <TouchableOpacity
             style={styles.card}
-            onPress={() => router.push(`/tabs/viewProfile?id=${item.id}`)}
+            onPress={() => router.push({ pathname: '/tabs/viewProfile', params: { id: item.id, from: '/tabs/save' } } as any)}
             activeOpacity={0.9}
         >
             <Image source={{ uri: item.image }} style={styles.cardImage} />
-
-            {/* Gradient overlay */}
             <View style={styles.gradient} />
 
-            {/* Unsave button */}
             <TouchableOpacity
                 style={styles.unsaveButton}
                 onPress={(e) => {
@@ -101,14 +100,11 @@ export default function Save() {
             >
                 <Ionicons name="bookmark" size={20} color={PRIMARY_COLOR} />
             </TouchableOpacity>
-
-            {/* Distance badge */}
             <View style={styles.distanceBadge}>
                 <Ionicons name="location" size={12} color="#fff" />
                 <Text style={styles.distanceText}>{item.distanceKm} km</Text>
             </View>
 
-            {/* Profile info */}
             <View style={styles.cardInfo}>
                 <Text style={styles.cardName}>
                     {item.name}, {item.age}
@@ -130,15 +126,15 @@ export default function Save() {
             <View style={styles.emptyIconContainer}>
                 <Ionicons name="bookmark-outline" size={80} color="#D1D5DB" />
             </View>
-            <Text style={styles.emptyTitle}>No saved profiles yet</Text>
+            <Text style={styles.emptyTitle}>Chưa có hồ sơ được lưu</Text>
             <Text style={styles.emptySubtitle}>
-                Bookmark profiles you like to save them for later
+                Đánh dấu hồ sơ bạn thích để lưu lại
             </Text>
             <TouchableOpacity
                 style={styles.exploreButton}
                 onPress={() => router.push('/tabs/heart')}
             >
-                <Text style={styles.exploreButtonText}>Start Exploring</Text>
+                <Text style={styles.exploreButtonText}>Bắt đầu khám phá</Text>
             </TouchableOpacity>
         </View>
     );
@@ -150,14 +146,19 @@ export default function Save() {
                 <TouchableOpacity style={styles.menuButton}>
                     <Ionicons name="menu" size={22} color="#1F2937" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Saved</Text>
+                <Text style={styles.headerTitle}>Đã lưu</Text>
                 <View style={styles.headerRight}>
                     <Text style={styles.countBadge}>{savedProfiles.length}</Text>
                 </View>
             </View>
 
             {/* Grid */}
-            {savedProfiles.length > 0 ? (
+            {loading ? (
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                    <ActivityIndicator />
+                    <Text style={{ color: '#6B7280', marginTop: 8 }}>Đang tải hồ sơ đã lưu...</Text>
+                </View>
+            ) : savedProfiles.length > 0 ? (
                 <FlatList
                     data={savedProfiles}
                     renderItem={renderProfileCard}

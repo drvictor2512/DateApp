@@ -1,17 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
+import { useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
-  Animated,
-  Easing,
-  Pressable,
   useWindowDimensions,
+  View,
 } from 'react-native';
 import { useAuth } from '../../lib/auth';
 
@@ -22,11 +22,11 @@ const CARD_BACKGROUND = '#FFFFFF';
 const LIGHT_BACKGROUND = '#F2F6F9';
 
 const FEATURES = [
-  { label: 'Unlimited swipes', free: true, premium: true },
-  { label: 'Advanced filters', free: true, premium: true },
-  { label: 'Remove ads', free: false, premium: true },
-  { label: 'Undo accidental left swipes', free: false, premium: true },
-  { label: 'Push your profile to more viewers', free: false, premium: true },
+  { label: 'Quẹt không giới hạn', free: true, premium: true },
+  { label: 'Bộ lọc nâng cao', free: true, premium: true },
+  { label: 'Loại bỏ quảng cáo', free: false, premium: true },
+  { label: 'Hoàn tác quẹt nhầm', free: false, premium: true },
+  { label: 'Đẩy hồ sơ tới nhiều người hơn', free: false, premium: true },
 ];
 
 export default function Home() {
@@ -59,9 +59,6 @@ export default function Home() {
         <TouchableOpacity style={styles.iconButton} onPress={openMenu}>
           <Ionicons name="menu" size={24} color="#1F2A37" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconButton}>
-          <Ionicons name="settings-outline" size={24} color="#1F2A37" />
-        </TouchableOpacity>
       </View>
 
       {/* Profile summary card with avatar, completion and CTA */}
@@ -77,7 +74,7 @@ export default function Home() {
               </View>
             </View>
             <View style={styles.progressPill}>
-              <Text style={styles.progressText}>45% complete</Text>
+              <Text style={styles.progressText}>Hoàn thành 45%</Text>
             </View>
           </View>
 
@@ -89,11 +86,11 @@ export default function Home() {
               <Ionicons name="shield-checkmark" size={18} color={PRIMARY_COLOR} />
             </View>
             <Text style={styles.profileSubText}>
-              Complete your profile to unlock better matches.
+              Hoàn thiện hồ sơ để nhận nhiều gợi ý phù hợp hơn.
             </Text>
             {/* Navigate to Edit Profile screen */}
             <TouchableOpacity style={styles.editButton} onPress={() => router.push('/tabs/myProfile')}>
-              <Text style={styles.editButtonText}>Edit your profile</Text>
+              <Text style={styles.editButtonText}>Chỉnh sửa hồ sơ</Text>
               <Ionicons name="chevron-forward" size={16} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -107,10 +104,10 @@ export default function Home() {
         </View>
         <View style={styles.verificationTextWrapper}>
           <Text style={styles.verificationTitle}>
-            Verification adds an extra layer of authenticity and trust to your profile.
+            Xác minh giúp tăng độ tin cậy cho hồ sơ của bạn.
           </Text>
           <TouchableOpacity>
-            <Text style={styles.verifyLink}>Verify your account now!</Text>
+            <Text style={styles.verifyLink}>Xác minh tài khoản ngay!</Text>
           </TouchableOpacity>
         </View>
         <Ionicons name="chevron-forward" size={18} color={SECONDARY_COLOR} />
@@ -119,11 +116,11 @@ export default function Home() {
       {/* Tabs row (Plans/Safety) */}
       <View style={styles.tabsRow}>
         <TouchableOpacity style={styles.tabItemActive}>
-          <Text style={styles.tabLabelActive}>Plans</Text>
+          <Text style={styles.tabLabelActive}>Gói</Text>
           <View style={styles.tabIndicator} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.tabItem}>
-          <Text style={styles.tabLabel}>Safety</Text>
+          <Text style={styles.tabLabel}>Bảo mật</Text>
         </TouchableOpacity>
       </View>
 
@@ -134,19 +131,19 @@ export default function Home() {
           <Ionicons name="sparkles-outline" size={20} color="#FFFFFFAA" />
         </View>
         <Text style={styles.premiumDescription}>
-          Unlock exclusive features and supercharge your dating experience.
+          Mở khóa tính năng cao cấp và nâng trải nghiệm tìm người yêu.
         </Text>
         <TouchableOpacity style={styles.upgradeButton}>
-          <Text style={styles.upgradeText}>Upgrade from $7.99</Text>
+          <Text style={styles.upgradeText}>Nâng cấp từ $7.99</Text>
         </TouchableOpacity>
       </View>
 
       {/* Feature comparison table */}
       <View style={styles.featuresCard}>
         <View style={styles.tableHeader}>
-          <Text style={styles.tableHeaderLabel}>Whats included</Text>
-          <Text style={styles.tableHeaderColumn}>Free</Text>
-          <Text style={styles.tableHeaderColumn}>Premium</Text>
+          <Text style={styles.tableHeaderLabel}>Bao gồm</Text>
+          <Text style={styles.tableHeaderColumn}>Miễn phí</Text>
+          <Text style={styles.tableHeaderColumn}>Cao cấp</Text>
         </View>
         {FEATURES.map((feature) => (
           <View style={styles.tableRow} key={feature.label}>

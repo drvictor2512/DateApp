@@ -1,12 +1,14 @@
-import { Ionicons } from '@expo/vector-icons' 
+import { Ionicons } from '@expo/vector-icons'
+import AsyncStorage from '@react-native-async-storage/async-storage'
+import { useFocusEffect } from '@react-navigation/native'
 import { useRouter } from 'expo-router'
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react' 
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, Dimensions, Easing, Image, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
-import { listUsers, updateUser, User, getUser } from '../../lib/api'
+import { getUser, listUsers, updateUser, User } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { IMAGE_FALLBACK } from '../../lib/config'
-import { getPrefs, clearPrefs } from '../../lib/prefs'
-import { useFocusEffect } from '@react-navigation/native'
+import { emit as emitEvent } from '../../lib/events'
+import { clearPrefs, getPrefs } from '../../lib/prefs'
 
 const { width } = Dimensions.get('window')
 const SWIPE_THRESHOLD = width * 0.25
@@ -40,7 +42,6 @@ export default function Heart() {
     outputRange: ['-15deg', '0deg', '15deg'],
   })
 
-  // Overlay opacity for like/dislike indicators
   const likeOpacity = positionX.interpolate({ inputRange: [0, width / 3], outputRange: [0, 1], extrapolate: 'clamp' })
   const nopeOpacity = positionX.interpolate({ inputRange: [-width / 3, 0], outputRange: [1, 0], extrapolate: 'clamp' })
   const nextScale = positionX.interpolate({ inputRange: [-width, 0, width], outputRange: [1, 0.96, 1], extrapolate: 'clamp' })
@@ -58,18 +59,19 @@ export default function Heart() {
           const nope = dx < -SWIPE_THRESHOLD || vx < -0.8
           const likedId = profiles[index]?.id
           if (like) {
-            Animated.timing(positionX, { toValue: width * 1.2, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(async () => {
-              if (likedId) await likeUser(likedId)
+            Animated.timing(positionX, { toValue: width * 1.2, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => {
+              // advance card immediately, perform network update in background for snappy UX
               nextCard()
+              if (likedId) { likeUser(likedId).catch((e) => console.warn('likeUser failed', e)) }
             })
           } else if (nope) {
-            Animated.timing(positionX, { toValue: -width * 1.2, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(nextCard)
+            Animated.timing(positionX, { toValue: -width * 1.2, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => nextCard())
           } else {
-            Animated.spring(positionX, { toValue: 0, useNativeDriver: true, friction: 6, tension: 80 }).start()
+            Animated.spring(positionX, { toValue: 0, useNativeDriver: true, friction: 7, tension: 90 }).start()
           }
         },
       }),
-    [positionX, profiles, index, endRound, me?.id, (me?.matches || []).length]
+    [positionX, profiles, index, endRound, me?.id, (me?.matches || []).length, matchUser]
   )
 
   const nextCard = () => {
@@ -134,16 +136,16 @@ export default function Heart() {
           if (str !== lastPrefsStr.current) {
             refreshWithPrefs(p)
           }
-        } catch {}
+        } catch { }
       })()
       // On blur, clear filters so that returning from other tabs resets
       return () => {
-        clearPrefs().catch(() => {})
+        clearPrefs().catch(() => { })
       }
     }, [me?.id])
   )
 
-  function applyPrefs(u: User, prefs: { gender?: 0|1|null; ageMin: number; ageMax: number; languages: string[] }) {
+  function applyPrefs(u: User, prefs: { gender?: 0 | 1 | null; ageMin: number; ageMax: number; languages: string[] }) {
     if (prefs.gender === 0 || prefs.gender === 1) {
       if (u.gender !== prefs.gender) return false
     }
@@ -165,7 +167,10 @@ export default function Heart() {
     const next = [...current, targetId]
     try {
       await updateUser(me.id, { matches: next })
-      setUser({ ...me, matches: next })
+      const newMe = { ...me, matches: next } as any
+      setUser(newMe)
+      try { await AsyncStorage.setItem('auth_user', JSON.stringify(newMe)) } catch (e) { }
+      try { emitEvent('matches:changed') } catch (e) { }
       // Always show a match modal (lightweight UX): no mutual check
       let info = profiles.find((p) => p.id === targetId)
       if (!info) {
@@ -177,7 +182,7 @@ export default function Heart() {
             age: u.age as any,
             image: (u.photos && u.photos[0]) || u.avatar || IMAGE_FALLBACK,
           } as any
-        } catch {}
+        } catch { }
       }
       setMatchUser({ id: targetId, name: info?.name || '', image: (info as any)?.image || IMAGE_FALLBACK })
     } catch (e) {
@@ -210,7 +215,7 @@ export default function Heart() {
       {/* Next card underneath for depth effect */}
       <View style={styles.cardStack}>
         {next && (
-          <Animated.View style={[styles.card, styles.cardUnder, { transform: [{ scale: nextScale }, { translateY: nextTranslateY }] }]}> 
+          <Animated.View style={[styles.card, styles.cardUnder, { transform: [{ scale: nextScale }, { translateY: nextTranslateY }] }]}>
             <Image source={{ uri: next.image }} style={styles.image} />
           </Animated.View>
         )}
@@ -221,28 +226,28 @@ export default function Heart() {
             style={[styles.card, { transform: [{ translateX: positionX }, { rotate }] }]}
             {...panResponder.panHandlers}
           >
-            <TouchableOpacity activeOpacity={0.9} onPress={() => router.push(`/tabs/viewProfile?id=${current.id}`)} style={{ flex: 1 }}>
+            <TouchableOpacity activeOpacity={0.9} onPress={() => router.push({ pathname: '/tabs/viewProfile', params: { id: current.id, from: '/tabs/heart' } } as any)} style={{ flex: 1 }}>
               <Image source={{ uri: current.image }} style={styles.image} />
 
-            {/* Text overlay info */}
-            <View style={styles.infoOverlay}>
-              <Text style={styles.nameText}>{current.name}, {current.age} <Ionicons name="shield-checkmark" size={14} color={PRIMARY_COLOR} /></Text>
-              <View style={styles.badgeRow}>
-                {!!current.pronouns && <Text style={styles.badge}>{current.pronouns}</Text>}
+              {/* Text overlay info */}
+              <View style={styles.infoOverlay}>
+                <Text style={styles.nameText}>{current.name}, {current.age} <Ionicons name="shield-checkmark" size={14} color={PRIMARY_COLOR} /></Text>
+                <View style={styles.badgeRow}>
+                  {!!current.pronouns && <Text style={styles.badge}>{current.pronouns}</Text>}
+                </View>
+                <View style={styles.jobRow}>
+                  <Ionicons name="briefcase-outline" size={14} color="#fff" />
+                  <Text style={styles.jobText}>{current.job || '—'}</Text>
+                </View>
               </View>
-              <View style={styles.jobRow}>
-                <Ionicons name="briefcase-outline" size={14} color="#fff" />
-                <Text style={styles.jobText}>{current.job || '—'}</Text>
-              </View>
-            </View>
 
-            {/* Like / Nope indicators (bottom center) */}
-            <Animated.View style={[styles.badgeBottom, { opacity: likeOpacity }]}>
-              <Ionicons name="checkmark-circle" size={84} color="#2DD4BF" />
-            </Animated.View>
-            <Animated.View style={[styles.badgeBottom, { opacity: nopeOpacity }]}>
-              <Ionicons name="close-circle" size={84} color="#F87171" />
-            </Animated.View>
+              {/* Like / Nope indicators (bottom center) */}
+              <Animated.View style={[styles.badgeBottom, { opacity: likeOpacity }]}>
+                <Ionicons name="checkmark-circle" size={84} color="#2DD4BF" />
+              </Animated.View>
+              <Animated.View style={[styles.badgeBottom, { opacity: nopeOpacity }]}>
+                <Ionicons name="close-circle" size={84} color="#F87171" />
+              </Animated.View>
             </TouchableOpacity>
           </Animated.View>
         ) : (
@@ -254,14 +259,15 @@ export default function Heart() {
 
       {/* Bottom actions (optional tap helpers) */}
       <View style={styles.actions}>
-        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]} onPress={() => Animated.timing(positionX, { toValue: -width * 1.2, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(nextCard)} disabled={!current || endRound || !!matchUser}>
+        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]} onPress={() => Animated.timing(positionX, { toValue: -width * 1.2, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => nextCard())} disabled={!current || endRound || !!matchUser}>
           <Ionicons name="close" size={28} color="#EF4444" />
         </TouchableOpacity>
         <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#D1FAE5' }]} onPress={() => {
           const likedId = profiles[index]?.id
-          Animated.timing(positionX, { toValue: width * 1.2, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(async () => {
-            if (likedId) await likeUser(likedId)
+          Animated.timing(positionX, { toValue: width * 1.2, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(() => {
+            // advance card immediately and perform network update in background
             nextCard()
+            if (likedId) { likeUser(likedId).catch((e) => console.warn('likeUser failed', e)) }
           })
         }} disabled={!current || endRound || !!matchUser}>
           <Ionicons name="checkmark" size={28} color="#10B981" />

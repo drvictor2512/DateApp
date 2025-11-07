@@ -1,76 +1,145 @@
 // app/tabs/chat.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { listUsers } from '../../lib/api';
+import { useAuth } from '../../lib/auth';
+import { API_BASE, IMAGE_FALLBACK } from '../../lib/config';
+import { on as onEvent } from '../../lib/events';
 
 const PRIMARY_COLOR = '#00C2D1';
 
-// Sử dụng data từ heart.tsx
-const PROFILES = [
-    {
-        id: '1',
-        name: 'Ava Jones',
-        age: 25,
-        job: 'Business Analyst at Tech',
-        pronouns: 'she/ her/ hers',
-        city: 'Las Vegas, NV 89104',
-        distanceKm: 2,
-        image: 'https://images.unsplash.com/photo-1517960413843-0aee8e2b3285?w=800&q=80',
-        lastMessage: 'Hey there!',
-        timestamp: '2 hours ago',
-        unread: true,
-    },
-    {
-        id: '2',
-        name: 'Rae Smith',
-        age: 27,
-        job: 'Product Designer',
-        pronouns: 'she/ her',
-        city: 'Los Angeles, CA',
-        distanceKm: 4,
-        image: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800&q=80',
-        lastMessage: "That's awesome! 😊",
-        timestamp: '5 hours ago',
-        unread: false,
-    },
-    {
-        id: '3',
-        name: 'Mia Brown',
-        age: 24,
-        job: 'Illustrator',
-        pronouns: 'she/ her',
-        city: 'Seattle, WA',
-        distanceKm: 7,
-        image: 'https://images.unsplash.com/photo-1526510747491-58f928ec870f?w=800&q=80',
-        lastMessage: 'See you tomorrow!',
-        timestamp: '1 day ago',
-        unread: false,
-    },
-];
+
+type ChatProfile = {
+    id: string;
+    name: string;
+    age?: number;
+    job?: string;
+    city?: string;
+    distanceKm?: number;
+    image: string;
+    lastMessage?: string;
+    timestamp?: string;
+    unread?: boolean;
+};
 
 export default function Chat() {
     const router = useRouter();
+    const { user: me } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
+    const [profiles, setProfiles] = useState<ChatProfile[]>([]);
+    const [chats, setChats] = useState<ChatProfile[]>([]);
+    const [loading, setLoading] = useState(false);
 
-    const filteredChats = PROFILES.filter(profile =>
+    useEffect(() => {
+        let mounted = true;
+
+        const load = async () => {
+            setLoading(true);
+            try {
+                const users = await listUsers();
+                const mapped: ChatProfile[] = users
+                    .filter(u => u.id !== me?.id)
+                    .map(u => ({
+                        id: u.id,
+                        name: u.name || 'Unknown',
+                        age: u.age,
+                        job: u.occupation,
+                        city: u.location,
+                        image: u.avatar || (u.photos && u.photos[0]) || IMAGE_FALLBACK,
+                        lastMessage: undefined,
+                        timestamp: undefined,
+                        unread: false,
+                    }));
+                if (mounted) setProfiles(mapped);
+
+                if (me && me.id) {
+                    try {
+                        const res = await fetch(`${API_BASE}/messages`);
+                        if (res.ok) {
+                            const convos = await res.json();
+                            const myConvos = convos.filter((c: any) =>
+                                String(c.user1Id) === String(me.id) || String(c.user2Id) === String(me.id)
+                            );
+                            const mappedChatsRaw: ChatProfile[] = myConvos.map((c: any) => {
+                                const last = (c.messages && c.messages.length > 0) ? c.messages[c.messages.length - 1] : null;
+                                const partnerId = String(c.user1Id) === String(me.id) ? String(c.user2Id) : String(c.user1Id);
+                                const partner = users.find(u => String(u.id) === String(partnerId));
+                                return {
+                                    id: partnerId,
+                                    name: partner?.name || 'Unknown',
+                                    age: partner?.age,
+                                    job: partner?.occupation,
+                                    city: partner?.location,
+                                    image: partner?.avatar || (partner?.photos && partner.photos[0]) || IMAGE_FALLBACK,
+                                    lastMessage: last?.text,
+                                    timestamp: last?.timestamp,
+                                    unread: Boolean(c.messages && c.messages.some((m: any) => String(m.senderId) !== String(me.id) && !m.isRead)),
+                                };
+                            });
+
+                            // dedupe by partner id, keeping the most recent conversation per partner
+                            const dedupeMap = new Map<string, ChatProfile>();
+                            for (const ch of mappedChatsRaw) {
+                                const existing = dedupeMap.get(ch.id);
+                                if (!existing) {
+                                    dedupeMap.set(ch.id, ch);
+                                } else {
+                                    // keep the one with a newer timestamp
+                                    if ((ch.timestamp || '') > (existing.timestamp || '')) {
+                                        dedupeMap.set(ch.id, ch);
+                                    }
+                                }
+                            }
+                            const mappedChats = Array.from(dedupeMap.values()).sort((a, b) => {
+                                const ta = a.timestamp || '';
+                                const tb = b.timestamp || '';
+                                return tb.localeCompare(ta);
+                            });
+                            if (mounted) setChats(mappedChats);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to load conversations for chat', e);
+                    }
+                }
+            } catch (e) {
+                console.warn('Failed to load users for chat', e);
+            } finally {
+                if (mounted) setLoading(false);
+            }
+        };
+
+        load();
+
+        const unsubConv = onEvent('conversations:changed', () => {
+            if (mounted) load();
+        });
+        const unsubMatches = onEvent('matches:changed', () => {
+            if (mounted) load();
+        });
+
+        return () => { mounted = false; unsubConv(); unsubMatches(); };
+    }, [me?.id]);
+
+    const filteredChats = chats.filter(profile =>
         profile.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const renderMatchItem = ({ item }: { item: typeof PROFILES[0] }) => (
+    const renderMatchItem = ({ item }: { item: ChatProfile }) => (
         <TouchableOpacity
             style={styles.matchCard}
-            onPress={() => router.push({ pathname: '/tabs/chatDetails', params: { id: item.id, name: item.name } })}
+            onPress={() => router.push({ pathname: '/tabs/chatDetails', params: { id: item.id, name: item.name, from: '/tabs/chat' } })}
         >
             <Image source={{ uri: item.image }} style={styles.matchImage} />
             <Text style={styles.matchName} numberOfLines={1}>{item.name.split(' ')[0]}</Text>
         </TouchableOpacity>
     );
 
-    const renderChatItem = ({ item }: { item: typeof PROFILES[0] }) => (
+    const renderChatItem = ({ item }: { item: ChatProfile }) => (
         <TouchableOpacity
             style={styles.chatItem}
-            onPress={() => router.push({ pathname: '/tabs/chatDetails', params: { id: item.id, name: item.name } })}
+            onPress={() => router.push({ pathname: '/tabs/chatDetails', params: { id: item.id, name: item.name, from: '/tabs/chat' } })}
         >
             <View style={styles.avatarContainer}>
                 <Image source={{ uri: item.image }} style={styles.avatar} />
@@ -102,7 +171,7 @@ export default function Chat() {
                     <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="Search"
+                        placeholder="Tìm kiếm"
                         placeholderTextColor="#9CA3AF"
                         value={searchQuery}
                         onChangeText={setSearchQuery}
@@ -113,36 +182,48 @@ export default function Chat() {
             {/* Matches Section */}
             <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Matches ({PROFILES.length})</Text>
+                    <Text style={styles.sectionTitle}>Yêu thích ({(me?.matches || []).length})</Text>
                 </View>
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.matchesContainer}
                 >
-                    {PROFILES.map((profile) => (
-                        <View key={profile.id}>
-                            {renderMatchItem({ item: profile })}
-                        </View>
-                    ))}
+                    {(me?.matches || []).map((matchId) => {
+                        const p = profiles.find(pr => pr.id === matchId);
+                        if (!p) return null;
+                        return (
+                            <View key={p.id}>
+                                {renderMatchItem({ item: p })}
+                            </View>
+                        );
+                    })}
                 </ScrollView>
             </View>
 
             {/* Chats Section */}
             <View style={styles.chatsSection}>
                 <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Chats ({filteredChats.length})</Text>
+                    <Text style={styles.sectionTitle}>Trò chuyện ({filteredChats.length})</Text>
                     <TouchableOpacity>
                         <Ionicons name="options-outline" size={20} color="#6B7280" />
                     </TouchableOpacity>
                 </View>
-                <FlatList
-                    data={filteredChats}
-                    renderItem={renderChatItem}
-                    keyExtractor={item => item.id}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={styles.chatsList}
-                />
+
+                {loading ? (
+                    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                        <ActivityIndicator />
+                        <Text style={{ color: '#6B7280', marginTop: 8 }}>Đang tải cuộc trò chuyện...</Text>
+                    </View>
+                ) : (
+                    <FlatList
+                        data={filteredChats}
+                        renderItem={renderChatItem}
+                        keyExtractor={item => item.id}
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={styles.chatsList}
+                    />
+                )}
             </View>
         </View>
     );
