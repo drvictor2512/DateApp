@@ -1,12 +1,13 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { API_BASE } from './config';
-import type { User } from './api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import type { User } from './api';
+import { API_BASE } from './config';
 
 type AuthContextType = {
   user: User | null;
   setUser: (u: User | null) => void;
   login: (username: string, password: string) => Promise<User>;
+  register: (username: string, password: string) => Promise<User>;
   logout: () => void;
   hydrated: boolean;
 };
@@ -44,10 +45,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return arr[0];
   };
 
+  const register = async (username: string, password: string) => {
+    let existing: User[] = [];
+    try {
+      const check = await fetch(`${API_BASE}/user?username=${encodeURIComponent(username)}`);
+      if (check.ok) existing = await check.json();
+    } catch (e) {
+      // ignore network errors; sẽ kiểm tra trùng sau
+    }
+    if (Array.isArray(existing) && existing.length > 0) {
+      throw new Error('Tên đăng nhập đã tồn tại');
+    }
+    const res = await fetch(`${API_BASE}/user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username,
+        password,
+        name: username,
+        matches: [],
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(text || 'Đăng ký thất bại');
+    }
+    const created = (await res.json()) as User;
+    setUser(created);
+    try { await AsyncStorage.setItem('auth_user', JSON.stringify(created)); } catch {}
+    return created;
+  };
+
   const logout = () => { setUser(null); AsyncStorage.removeItem('auth_user').catch(() => {}); };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, login, logout, hydrated }}>
+    <AuthContext.Provider value={{ user, setUser, login, register, logout, hydrated }}>
       {children}
     </AuthContext.Provider>
   );

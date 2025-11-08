@@ -2,8 +2,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Dimensions, FlatList, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Dimensions, Easing, FlatList, Image, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { listUsers, updateUser } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { IMAGE_FALLBACK } from '../../lib/config';
@@ -27,9 +27,24 @@ type SavedProfile = {
 
 export default function Save() {
     const router = useRouter();
-    const { user: me, setUser } = useAuth();
+    const { user: me, setUser, logout } = useAuth();
     const [savedProfiles, setSavedProfiles] = useState<SavedProfile[]>([]);
     const [loading, setLoading] = useState(false);
+    const { width: screenWidth } = useWindowDimensions();
+    const drawerWidth = Math.min(screenWidth * 0.75, 320);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const anim = useRef(new Animated.Value(0)).current;
+    const openMenu = () => {
+        setMenuOpen(true);
+        Animated.timing(anim, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    };
+    const closeMenu = () => {
+        Animated.timing(anim, { toValue: 0, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+            if (finished) setMenuOpen(false);
+        });
+    };
+    const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [-drawerWidth, 0] });
+    const backdropOpacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] });
     useEffect(() => {
         let mounted = true;
         (async () => {
@@ -143,11 +158,11 @@ export default function Save() {
         <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity style={styles.menuButton}>
-                    <Ionicons name="menu" size={22} color="#1F2937" />
+                <TouchableOpacity style={styles.iconButton} onPress={openMenu}>
+                    <Ionicons name="menu" size={24} color="#1F2A37" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Đã lưu</Text>
-                <View style={styles.headerRight}>
+                <View style={styles.iconButton}>
                     <Text style={styles.countBadge}>{savedProfiles.length}</Text>
                 </View>
             </View>
@@ -171,6 +186,36 @@ export default function Save() {
             ) : (
                 renderEmptyState()
             )}
+            {menuOpen && (
+                <>
+                    <Animated.View pointerEvents={menuOpen ? 'auto' : 'none'} style={[styles.menuBackdrop, { opacity: backdropOpacity }]} />
+                    <Animated.View style={[styles.menuDrawer, { width: drawerWidth, transform: [{ translateX }] }]}>
+                        <View style={styles.menuHeader}>
+                            <View style={styles.menuAvatarRing}>
+                                {me?.avatar || (me?.photos && me.photos[0]) ? (
+                                    <Image source={{ uri: me?.avatar || (me?.photos && me.photos[0]) || IMAGE_FALLBACK }} style={styles.menuAvatar} />
+                                ) : (
+                                    <Ionicons name="person" size={32} color={PRIMARY_COLOR} />
+                                )}
+                            </View>
+                            <View>
+                                <Text style={styles.menuName}>{me?.name ?? 'Người dùng'}</Text>
+                                {me?.age ? <Text style={styles.menuSubtitle}>{me.age} tuổi</Text> : null}
+                            </View>
+                        </View>
+                        <TouchableOpacity style={styles.menuItem} onPress={() => { closeMenu(); router.push('/tabs/myProfile'); }}>
+                            <Ionicons name="create-outline" size={20} color="#111827" />
+                            <Text style={styles.menuItemText}>Chỉnh sửa hồ sơ</Text>
+                        </TouchableOpacity>
+                        <View style={styles.menuDivider} />
+                        <TouchableOpacity style={styles.menuItem} onPress={() => { closeMenu(); logout(); router.replace('/auth'); }}>
+                            <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+                            <Text style={[styles.menuItemText, { color: '#DC2626' }]}>Đăng xuất</Text>
+                        </TouchableOpacity>
+                    </Animated.View>
+                    <Pressable onPress={closeMenu} style={[styles.menuPressable, { left: drawerWidth }]} />
+                </>
+            )}
         </View>
     );
 }
@@ -184,17 +229,14 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingTop: 50,
-        paddingBottom: 16,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#F3F4F6',
+        paddingHorizontal: 20,
+        marginTop: 10,
+        marginBottom: 16,
     },
-    menuButton: {
-        width: 36,
-        height: 36,
-        borderRadius: 10,
+    iconButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: '#F2F6F9',
@@ -203,12 +245,6 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '700',
         color: '#111827',
-    },
-    headerRight: {
-        width: 36,
-        height: 36,
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     countBadge: {
         fontSize: 14,
@@ -355,4 +391,15 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
     },
+    menuBackdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: '#000' },
+    menuDrawer: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#fff', borderRightWidth: 1, borderRightColor: '#E5E7EB', paddingTop: 40, paddingHorizontal: 16 },
+    menuHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+    menuAvatarRing: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#E6F3F6', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+    menuAvatar: { width: '100%', height: '100%' },
+    menuName: { fontWeight: '700', color: '#111827', fontSize: 16 },
+    menuSubtitle: { color: '#6B7280' },
+    menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
+    menuItemText: { color: '#111827', fontWeight: '600' },
+    menuDivider: { height: 1, backgroundColor: '#E5E7EB', marginVertical: 12 },
+    menuPressable: { position: 'absolute', right: 0, top: 0, bottom: 0 },
 });

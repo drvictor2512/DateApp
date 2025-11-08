@@ -6,9 +6,11 @@ import { useAuth } from '../../lib/auth';
 
 export default function Login() {
   const router = useRouter();
-  const { login, user, hydrated } = useAuth();
+  const { login, register, user, hydrated } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -40,6 +42,15 @@ export default function Login() {
               <Text style={{ color: '#6B7280', marginTop: 8 }}>Đang kiểm tra phiên...</Text>
             </View>
           )}
+          <View style={styles.toggleContainer}>
+            <TouchableOpacity style={[styles.toggleButton, isLogin && styles.toggleButtonActive]} onPress={() => { setIsLogin(true); setError(''); }}>
+              <Text style={[styles.toggleText, isLogin && styles.toggleTextActive]}>Đăng nhập</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.toggleButton, !isLogin && styles.toggleButtonActive]} onPress={() => { setIsLogin(false); setError(''); }}>
+              <Text style={[styles.toggleText, !isLogin && styles.toggleTextActive]}>Đăng ký</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.inputContainer}>
             <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
             <TextInput
@@ -65,6 +76,21 @@ export default function Login() {
             />
           </View>
 
+          {!isLogin && (
+            <View style={styles.inputContainer}>
+              <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Xác nhận mật khẩu"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry
+                autoCapitalize="none"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+              />
+            </View>
+          )}
+
           {error ? <Text style={{ color: '#EF4444', textAlign: 'center' }}>{error}</Text> : null}
 
           <TouchableOpacity
@@ -74,10 +100,16 @@ export default function Login() {
               setError('');
               setLoading(true);
               try {
-                await login(username.trim(), password);
+                if (isLogin) {
+                  await login(username.trim(), password);
+                } else {
+                  if (!username.trim() || !password) throw new Error('Vui lòng nhập đầy đủ thông tin');
+                  if (password !== confirmPassword) throw new Error('Mật khẩu xác nhận không khớp');
+                  await register(username.trim(), password);
+                }
                 router.replace('/tabs' as any);
               } catch (e: any) {
-                setError(e?.message || 'Đăng nhập thất bại');
+                setError(e?.message || (isLogin ? 'Đăng nhập thất bại' : 'Đăng ký thất bại'));
               } finally {
                 setLoading(false);
               }
@@ -86,7 +118,7 @@ export default function Login() {
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.submitButtonText}>Đăng nhập</Text>
+              <Text style={styles.submitButtonText}>{isLogin ? 'Đăng nhập' : 'Đăng ký'}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -109,4 +141,9 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#fff', borderWidth: 2, borderColor: '#E5E7EB', borderRadius: 50, paddingVertical: 14, paddingLeft: 48, paddingRight: 16, fontSize: 16, color: '#1F2937' },
   submitButton: { backgroundColor: '#8B5CF6', borderRadius: 50, paddingVertical: 16, alignItems: 'center', marginTop: 8, shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8 },
   submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  toggleContainer: { flexDirection: 'row', backgroundColor: '#F3F4F6', borderRadius: 50, padding: 4, marginBottom: 8 },
+  toggleButton: { flex: 1, paddingVertical: 10, borderRadius: 46, alignItems: 'center' },
+  toggleButtonActive: { backgroundColor: '#8B5CF6', shadowColor: '#8B5CF6', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 3 },
+  toggleText: { fontSize: 15, fontWeight: '600', color: '#6B7280' },
+  toggleTextActive: { color: '#fff' },
 });
