@@ -6,12 +6,14 @@ import { Alert, Image, Modal, ScrollView, StyleSheet, Text, TextInput, Touchable
 import { updateUser, type User } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { uploadImage } from '../../lib/cloudinary';
-import { CLOUDINARY, IMAGE_FALLBACK } from '../../lib/config';
+import { CLOUDINARY } from '../../lib/config';
 
 const PRIMARY_COLOR = '#00C2D1';
 const SECONDARY_COLOR = '#5A6C7A';
 const BORDER_COLOR = '#E5EAF0';
 const LIGHT_BACKGROUND = '#F2F6F9';
+
+const IMAGE_MEDIA_TYPE = (ImagePicker as any).MediaType?.IMAGES ?? ImagePicker.MediaTypeOptions.Images;
 
 export default function MyProfile() {
   const router = useRouter();
@@ -90,7 +92,7 @@ export default function MyProfile() {
   };
 
   // Editing modal state
-  type EditField = { key: keyof User; label: string; type: 'text' | 'number' | 'select'; options?: Array<{ label: string; value: any }>; };
+  type EditField = { key: keyof User; label: string; type: 'text' | 'number' | 'select'; options?: { label: string; value: any }[]; };
   const [editing, setEditing] = useState<null | (EditField & { value: any })>(null);
   const [saving, setSaving] = useState(false);
   const [photoEditMode, setPhotoEditMode] = useState(false);
@@ -195,19 +197,29 @@ export default function MyProfile() {
               <View style={{ flexDirection: 'row', gap }}>
                 {/* Main avatar */}
                 <View style={{ width: mainSize }}>
-                  <TouchableOpacity style={[styles.photoMain, { width: mainSize, height: mainSize }]} onPress={() => openEditor({ key: 'avatar', label: 'Avatar', type: 'text' })} onLongPress={async () => {
-                    // Long press to pick and upload new avatar
-                    if (!user) return;
-                    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-                    if (status !== 'granted') return;
-                    const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.9 });
-                    if (pick.canceled) return;
-                    try {
-                      const up = await uploadImage(pick.assets[0].uri);
-                      await savePatch({ avatar: up.secure_url, avatarDeleteToken: up.delete_token });
-                    } catch (e) { console.warn(e); }
-                  }} activeOpacity={0.85}>
-                    <Image source={{ uri: (user?.avatar) ?? IMAGE_FALLBACK }} style={{ width: '100%', height: '100%', borderRadius: 12 }} />
+                  <TouchableOpacity
+                    style={[styles.photoMain, { width: mainSize, height: mainSize }]}
+                    activeOpacity={0.85}
+                    onPress={async () => {
+                      if (!user) return;
+                      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                      if (status !== 'granted') return;
+                      const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: IMAGE_MEDIA_TYPE, quality: 0.9 });
+                      if (pick.canceled) return;
+                      try {
+                        const up = await uploadImage(pick.assets[0].uri);
+                        await savePatch({ avatar: up.secure_url, avatarDeleteToken: up.delete_token });
+                      } catch (e) { console.warn(e); }
+                    }}
+                  >
+                    {user?.avatar ? (
+                      <Image source={{ uri: user.avatar }} style={{ width: '100%', height: '100%', borderRadius: 12 }} />
+                    ) : (
+                      <View style={styles.photoPlaceholder}>
+                        <Ionicons name="add" size={28} color={SECONDARY_COLOR} />
+                        <Text style={{ color: SECONDARY_COLOR, marginTop: 4 }}>Thêm ảnh</Text>
+                      </View>
+                    )}
                     {photoEditMode && !!user?.avatar && (
                       <TouchableOpacity onPress={confirmDeleteAvatar} style={styles.deleteBadge}>
                         <Ionicons name="trash" size={16} color="#fff" />
@@ -233,7 +245,7 @@ export default function MyProfile() {
                         if (!user) return;
                         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
                         if (status !== 'granted') return;
-                        const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.9 });
+                const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: IMAGE_MEDIA_TYPE, quality: 0.9 });
                         if (pick.canceled) return;
                         try {
                           const up = await uploadImage(pick.assets[0].uri);
@@ -272,7 +284,7 @@ export default function MyProfile() {
                       if (!user) return;
                       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
                       if (status !== 'granted') return;
-                      const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.9 });
+                      const pick = await ImagePicker.launchImageLibraryAsync({ mediaTypes: IMAGE_MEDIA_TYPE, quality: 0.9 });
                       if (pick.canceled) return;
                       try {
                         const up = await uploadImage(pick.assets[0].uri);
@@ -398,7 +410,7 @@ export default function MyProfile() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>I communicate in</Text>
+        <Text style={styles.sectionTitle}>Ngôn ngữ</Text>
         <TouchableOpacity style={styles.selectBox} onPress={() => setLanguageOpen((o) => !o)}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Ionicons name="globe-outline" size={16} color={SECONDARY_COLOR} /><Text style={styles.selectText}>Choose a language</Text></View>
           <Ionicons name={languageOpen ? 'chevron-up' : 'chevron-down'} size={16} color={SECONDARY_COLOR} />
@@ -520,6 +532,7 @@ const styles = StyleSheet.create({
   photosGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   photoMain: { width: 180, height: 200, borderRadius: 12, backgroundColor: '#FFF5D8', borderWidth: 1, borderColor: BORDER_COLOR },
   photoSlot: { width: 90, height: 95, borderRadius: 12, borderWidth: 1, borderColor: BORDER_COLOR, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF' },
+  photoPlaceholder: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#F2F6F9' },
   textAreaPlaceholder: { height: 120, borderWidth: 1, borderColor: BORDER_COLOR, borderRadius: 12, padding: 12, backgroundColor: '#FFFFFF' },
   textAreaInput: { flex: 1, fontSize: 13, color: '#111827' },
   detailsList: { borderWidth: 1, borderColor: BORDER_COLOR, borderRadius: 16, overflow: 'hidden' },

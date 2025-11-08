@@ -114,40 +114,40 @@ export default function ViewProfile() {
           </View>
 
           {/* Basic info */}
-          <View style={{ paddingHorizontal: 16, marginTop: 14 }}>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: '#111827' }}>
+          <View style={styles.section}>
+            <Text style={styles.basicName}>
               {data?.name ?? '—'}{data?.age ? `, ${data.age}` : ''}
             </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+            <View style={styles.basicRow}>
               <Ionicons name="briefcase-outline" size={14} color={SECONDARY_COLOR} />
-              <Text style={{ color: SECONDARY_COLOR }}>{data?.occupation || '—'}</Text>
+              <Text style={styles.basicText}>{data?.occupation || '—'}</Text>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+            <View style={styles.basicRow}>
               <Ionicons name="location-outline" size={14} color={PRIMARY_COLOR} />
-              <Text style={{ color: '#111827' }}>{data?.location || '—'}</Text>
+              <Text style={styles.basicText}>{data?.location || '—'}</Text>
             </View>
           </View>
 
           {/* About me */}
-          <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
-            <Text style={styles.sectionTitle}>About me</Text>
-            <Text style={{ color: SECONDARY_COLOR, lineHeight: 20 }}>{data?.bio || '—'}</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Giới thiệu</Text>
+            <Text style={styles.sectionBody}>{data?.bio || 'Người dùng chưa cập nhật giới thiệu.'}</Text>
           </View>
 
           {/* My details */}
-          <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
-            <Text style={styles.sectionTitle}>My details</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Thông tin chi tiết</Text>
             <View style={styles.detailsList}>
               {([
-                { label: 'Gender & Pronouns', value: data ? (data.gender === 0 ? 'Female (she/her)' : 'Male (he/him)') : '—', icon: 'male-outline' },
-                { label: 'Education', value: data?.education || '—', icon: 'school-outline' },
-                { label: 'Height', value: data?.height ? `${data.height} cm` : '—', icon: 'ruler-outline' },
-                { label: 'Smoking', value: data?.smoking || '—', icon: 'cafe-outline' },
-                { label: 'Drinking', value: data?.drinking || '—', icon: 'wine-outline' },
-                { label: 'Pets', value: data?.pets || '—', icon: 'paw-outline' },
-                { label: 'Children', value: data?.children || '—', icon: 'people-outline' },
-                { label: 'Zodiac sign', value: data?.zodiac || '—', icon: 'planet-outline' },
-                { label: 'Religion', value: data?.religion || '—', icon: 'hand-left-outline' },
+                { label: 'Giới tính & đại từ', value: data ? (data.gender === 0 ? 'Nữ (she/her)' : 'Nam (he/him)') : '—', icon: 'male-outline' },
+                { label: 'Học vấn', value: data?.education || '—', icon: 'school-outline' },
+                { label: 'Chiều cao', value: data?.height ? `${data.height} cm` : '—', icon: 'ruler-outline' },
+                { label: 'Hút thuốc', value: data?.smoking || '—', icon: 'cafe-outline' },
+                { label: 'Uống rượu', value: data?.drinking || '—', icon: 'wine-outline' },
+                { label: 'Thú cưng', value: data?.pets || '—', icon: 'paw-outline' },
+                { label: 'Con cái', value: data?.children || '—', icon: 'people-outline' },
+                { label: 'Cung hoàng đạo', value: data?.zodiac || '—', icon: 'planet-outline' },
+                { label: 'Tôn giáo', value: data?.religion || '—', icon: 'hand-left-outline' },
               ]).map((row) => (
                 <View key={row.label} style={styles.detailRow}>
                   <View style={styles.detailLeft}><Ionicons name={row.icon as any} size={18} color={SECONDARY_COLOR} /><Text style={styles.detailLabel}>{row.label}</Text></View>
@@ -159,8 +159,9 @@ export default function ViewProfile() {
 
           {/* Interests */}
           {!!(data?.interests && data.interests.length) && (
-            <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
-              <Text style={styles.sectionTitle}>I enjoy</Text>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Sở thích</Text>
+              <Text style={styles.sectionSub}>Điểm chung giúp cả hai dễ kết nối hơn.</Text>
               <View style={styles.tagsWrap}>
                 {data!.interests!.map((d) => (<Text key={d} style={styles.tag}>{d}</Text>))}
               </View>
@@ -169,8 +170,9 @@ export default function ViewProfile() {
 
           {/* Languages */}
           {!!(data?.languages && data.languages.length) && (
-            <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
-              <Text style={styles.sectionTitle}>I communicate in</Text>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Ngôn ngữ</Text>
+              <Text style={styles.sectionSub}>Những ngôn ngữ {data?.name?.split(' ')[0] || 'họ'} có thể giao tiếp.</Text>
               <View style={styles.tagsWrap}>
                 {data!.languages!.map((d) => (<Text key={d} style={styles.tag}>{d}</Text>))}
               </View>
@@ -230,15 +232,20 @@ export default function ViewProfile() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#FFFFFF' },
-  headerRow: { paddingHorizontal: 16, marginTop: 12, marginBottom: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerRow: { paddingHorizontal: 20, marginTop: 10, marginBottom: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F2F6F9' },
   headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
 
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827', marginBottom: 8 },
+  section: { paddingHorizontal: 20, marginTop: 16, gap: 8 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
+  sectionSub: { fontSize: 13, color: SECONDARY_COLOR },
+  sectionBody: { color: SECONDARY_COLOR, lineHeight: 20 },
+  basicName: { fontSize: 22, fontWeight: '800', color: '#111827' },
+  basicRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  basicText: { color: SECONDARY_COLOR },
   tagsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tag: { backgroundColor: '#F2F6F9', color: SECONDARY_COLOR, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14 },
 
-  // Details list (read-only)
   detailsList: { borderWidth: 1, borderColor: BORDER_COLOR, borderRadius: 16, overflow: 'hidden' },
   detailRow: { paddingHorizontal: 14, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: BORDER_COLOR },
   detailLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },

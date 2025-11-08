@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useFocusEffect } from '@react-navigation/native'
 import { useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Animated, Dimensions, Easing, Image, PanResponder, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Animated, Dimensions, Easing, Image, PanResponder, Pressable, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native'
 import { getUser, listUsers, updateUser, User } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { IMAGE_FALLBACK } from '../../lib/config'
@@ -27,15 +27,30 @@ type CardProfile = {
 
 export default function Heart() {
   const router = useRouter()
-  const { user: me, setUser } = useAuth()
+  const { user: me, setUser, logout } = useAuth()
+  const { width: screenWidth } = useWindowDimensions()
+  const drawerWidth = Math.min(screenWidth * 0.75, 320)
   const [index, setIndex] = useState(0)
   const [profiles, setProfiles] = useState<CardProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [endRound, setEndRound] = useState(false)
   const [matchUser, setMatchUser] = useState<{ id: string; name: string; image: string } | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
   const positionX = useRef(new Animated.Value(0)).current
   const lastPrefsStr = useRef<string | null>(null)
   const likedMeIds = useRef<Set<string>>(new Set())
+  const drawerAnim = useRef(new Animated.Value(0)).current
+  const openMenu = () => {
+    setMenuOpen(true)
+    Animated.timing(drawerAnim, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start()
+  }
+  const closeMenu = () => {
+    Animated.timing(drawerAnim, { toValue: 0, duration: 200, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start(({ finished }) => {
+      if (finished) setMenuOpen(false)
+    })
+  }
+  const translateX = drawerAnim.interpolate({ inputRange: [0, 1], outputRange: [-drawerWidth, 0] })
+  const backdropOpacity = drawerAnim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] })
 
   const rotate = positionX.interpolate({
     inputRange: [-width, 0, width],
@@ -197,15 +212,16 @@ export default function Heart() {
     <View style={styles.screen}>
       {/* Header with menu, title and filter */}
       <View style={styles.headerRow}>
-        <TouchableOpacity style={styles.headerIcon}>
-          <Ionicons name="menu" size={22} color="#1F2A37" />
+        <TouchableOpacity style={styles.iconButton} onPress={openMenu}>
+          <Ionicons name="menu" size={24} color="#1F2A37" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>HeartSync</Text>
-        <TouchableOpacity style={[styles.headerIcon, { backgroundColor: '#DFF8FB' }]} onPress={() => router.push('/tabs/filter')}>
-          <Ionicons name="options-outline" size={18} color={PRIMARY_COLOR} />
+        <TouchableOpacity style={[styles.iconButton, { backgroundColor: '#DFF8FB' }]} onPress={() => router.push('/tabs/filter')}>
+          <Ionicons name="options-outline" size={20} color={PRIMARY_COLOR} />
         </TouchableOpacity>
       </View>
 
+      <View style={styles.content}>
       {/* Progress bar mimic under header */}
       <View style={styles.progressBar}><View style={[
         styles.progressFill,
@@ -273,6 +289,37 @@ export default function Heart() {
           <Ionicons name="checkmark" size={28} color="#10B981" />
         </TouchableOpacity>
       </View>
+      {menuOpen && (
+        <>
+          <Animated.View pointerEvents={menuOpen ? 'auto' : 'none'} style={[styles.menuBackdrop, { opacity: backdropOpacity }]} />
+          <Animated.View style={[styles.menuDrawer, { width: drawerWidth, transform: [{ translateX }] }]}>
+            <View style={styles.menuHeader}>
+              <View style={styles.menuAvatarRing}>
+                {me?.avatar || (me?.photos && me.photos[0]) ? (
+                  <Image source={{ uri: me?.avatar || (me?.photos && me.photos[0]) || IMAGE_FALLBACK }} style={styles.menuAvatar} />
+                ) : (
+                  <Ionicons name="person" size={32} color={PRIMARY_COLOR} />
+                )}
+              </View>
+              <View>
+                <Text style={styles.menuName}>{me?.name ?? 'Người dùng'}</Text>
+                {me?.age ? <Text style={styles.menuSubtitle}>{me.age} tuổi</Text> : null}
+              </View>
+            </View>
+            <TouchableOpacity style={styles.menuItem} onPress={() => { closeMenu(); router.push('/tabs/myProfile'); }}>
+              <Ionicons name="create-outline" size={20} color="#111827" />
+              <Text style={styles.menuItemText}>Chỉnh sửa hồ sơ</Text>
+            </TouchableOpacity>
+            <View style={styles.menuDivider} />
+            <TouchableOpacity style={styles.menuItem} onPress={() => { closeMenu(); logout(); router.replace('/auth'); }}>
+              <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+              <Text style={[styles.menuItemText, { color: '#DC2626' }]}>Đăng xuất</Text>
+            </TouchableOpacity>
+          </Animated.View>
+          <Pressable onPress={closeMenu} style={[styles.menuPressable, { left: drawerWidth }]} />
+        </>
+      )}
+      </View>
 
       {endRound && (
         <View style={styles.endOverlay}>
@@ -310,10 +357,11 @@ export default function Heart() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#FFFFFF', padding: 16 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 },
-  headerIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F2F6F9' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  screen: { flex: 1, backgroundColor: '#FFFFFF', paddingTop: 10 },
+  content: { flex: 1, paddingHorizontal: 20, paddingBottom: 16 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginTop: 10, marginBottom: 16 },
+  iconButton: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F2F6F9' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#111827' },
   progressBar: { height: 4, backgroundColor: '#E6F3F6', borderRadius: 2, marginTop: 6, marginBottom: 14 },
   progressFill: { height: 4, backgroundColor: PRIMARY_COLOR, borderRadius: 2 },
   cardStack: { flex: 1, alignItems: 'center', justifyContent: 'center' },
@@ -335,6 +383,17 @@ const styles = StyleSheet.create({
   endSubtitle: { color: SECONDARY_COLOR, textAlign: 'center' },
   endBtn: { marginTop: 8, backgroundColor: PRIMARY_COLOR, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12 },
   matchCard: { width: '100%', maxWidth: 360, backgroundColor: '#fff', borderRadius: 16, padding: 20, alignItems: 'center' },
+  menuBackdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: '#000' },
+  menuDrawer: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#fff', borderRightWidth: 1, borderRightColor: '#E5E7EB', paddingTop: 40, paddingHorizontal: 16 },
+  menuHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  menuAvatarRing: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#E6F3F6', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  menuAvatar: { width: '100%', height: '100%' },
+  menuName: { fontWeight: '700', color: '#111827', fontSize: 16 },
+  menuSubtitle: { color: SECONDARY_COLOR },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
+  menuItemText: { color: '#111827', fontWeight: '600' },
+  menuDivider: { height: 1, backgroundColor: '#E5E7EB', marginVertical: 12 },
+  menuPressable: { position: 'absolute', right: 0, top: 0, bottom: 0 },
 })
 
 

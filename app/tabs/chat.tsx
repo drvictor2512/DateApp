@@ -1,8 +1,8 @@
 // app/tabs/chat.tsx
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, FlatList, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { listUsers } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { API_BASE, IMAGE_FALLBACK } from '../../lib/config';
@@ -26,11 +26,27 @@ type ChatProfile = {
 
 export default function Chat() {
     const router = useRouter();
-    const { user: me } = useAuth();
+    const { user: me, logout } = useAuth();
     const [searchQuery, setSearchQuery] = useState('');
     const [profiles, setProfiles] = useState<ChatProfile[]>([]);
     const [chats, setChats] = useState<ChatProfile[]>([]);
     const [loading, setLoading] = useState(false);
+
+    const { width: screenWidth } = useWindowDimensions();
+    const drawerWidth = Math.min(screenWidth * 0.75, 320);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const anim = useRef(new Animated.Value(0)).current;
+    const openMenu = () => {
+        setMenuOpen(true);
+        Animated.timing(anim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+    };
+    const closeMenu = () => {
+        Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: true }).start(({ finished }) => {
+            if (finished) setMenuOpen(false);
+        });
+    };
+    const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [-drawerWidth, 0] });
+    const backdropOpacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 0.35] });
 
     useEffect(() => {
         let mounted = true;
@@ -164,8 +180,8 @@ export default function Chat() {
         <View style={styles.container}>
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity style={styles.menuButton}>
-                    <Ionicons name="menu" size={24} color="#1F2937" />
+                <TouchableOpacity style={styles.iconButton} onPress={openMenu}>
+                    <Ionicons name="menu" size={24} color="#1F2A37" />
                 </TouchableOpacity>
                 <View style={styles.searchContainer}>
                     <Ionicons name="search-outline" size={18} color="#9CA3AF" style={styles.searchIcon} />
@@ -225,6 +241,36 @@ export default function Chat() {
                     />
                 )}
             </View>
+            {menuOpen && (
+                <>
+                    <Animated.View pointerEvents={menuOpen ? 'auto' : 'none'} style={[styles.menuBackdrop, { opacity: backdropOpacity }]} />
+                    <Animated.View style={[styles.menuDrawer, { width: drawerWidth, transform: [{ translateX }] }]}>
+                        <View style={styles.menuHeader}>
+                            <View style={styles.menuAvatarRing}>
+                                {me?.avatar || (me?.photos && me.photos[0]) ? (
+                                    <Image source={{ uri: me?.avatar || (me?.photos && me.photos[0]) || IMAGE_FALLBACK }} style={styles.menuAvatar} />
+                                ) : (
+                                    <Ionicons name="person" size={32} color={PRIMARY_COLOR} />
+                                )}
+                            </View>
+                            <View>
+                                <Text style={styles.menuName}>{me?.name ?? 'Người dùng'}</Text>
+                                {me?.age ? <Text style={styles.menuSubtitle}>{me.age} tuổi</Text> : null}
+                            </View>
+                        </View>
+                        <TouchableOpacity style={styles.menuItem} onPress={() => { closeMenu(); router.push('/tabs/myProfile'); }}>
+                            <Ionicons name="create-outline" size={20} color="#111827" />
+                            <Text style={styles.menuItemText}>Chỉnh sửa hồ sơ</Text>
+                        </TouchableOpacity>
+                        <View style={styles.menuDivider} />
+                        <TouchableOpacity style={styles.menuItem} onPress={() => { closeMenu(); logout(); router.replace('/auth'); }}>
+                            <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+                            <Text style={[styles.menuItemText, { color: '#DC2626' }]}>Đăng xuất</Text>
+                        </TouchableOpacity>
+                    </Animated.View>
+                    <Pressable onPress={closeMenu} style={[styles.menuPressable, { left: drawerWidth }]} />
+                </>
+            )}
         </View>
     );
 }
@@ -237,17 +283,16 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingTop: 50,
-        paddingBottom: 16,
+        paddingHorizontal: 20,
+        marginTop: 10,
+        marginBottom: 16,
         gap: 12,
-        backgroundColor: '#fff',
     },
-    menuButton: {
+    iconButton: {
         width: 40,
         height: 40,
-        borderRadius: 8,
-        backgroundColor: '#F3F4F6',
+        borderRadius: 12,
+        backgroundColor: '#F2F6F9',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -255,9 +300,9 @@ const styles = StyleSheet.create({
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        height: 40,
-        backgroundColor: '#F3F4F6',
-        borderRadius: 8,
+        height: 44,
+        backgroundColor: '#F2F6F9',
+        borderRadius: 12,
         paddingHorizontal: 12,
     },
     searchIcon: {
@@ -377,4 +422,15 @@ const styles = StyleSheet.create({
         backgroundColor: PRIMARY_COLOR,
         marginLeft: 8,
     },
+    menuBackdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: '#000' },
+    menuDrawer: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#fff', borderRightWidth: 1, borderRightColor: '#E5E7EB', paddingTop: 40, paddingHorizontal: 16 },
+    menuHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+    menuAvatarRing: { width: 56, height: 56, borderRadius: 28, backgroundColor: '#E6F3F6', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+    menuAvatar: { width: '100%', height: '100%' },
+    menuName: { fontWeight: '700', color: '#111827', fontSize: 16 },
+    menuSubtitle: { color: '#6B7280' },
+    menuItem: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
+    menuItemText: { color: '#111827', fontWeight: '600' },
+    menuDivider: { height: 1, backgroundColor: '#E5E7EB', marginVertical: 12 },
+    menuPressable: { position: 'absolute', right: 0, top: 0, bottom: 0 },
 });
